@@ -835,6 +835,8 @@ class HandleBLauncherPreview(QWidget):
             base_path = (
                 self.zeroxe_conf.get("departments", {})
                 .get(selected_department, {})
+                .get("asset_type", {})
+                .get(asset_data["asset_type_name"], {})
                 .get("base_path", "")
             )
             master_path = Path(f"{base_path}/{asset_data['name']}")
