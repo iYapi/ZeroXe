@@ -266,20 +266,7 @@ class HandleBLauncherPreview(QWidget):
                         version_value = str(model.index(row, 1).data()).strip()
                         break
             if version_value in [None, "", "Master"]:
-                if self.ui.comboBox_entity.currentIndex() == 2:
-                    self.create_and_replace_file()
-                elif self.ui.comboBox_entity.currentIndex() == 1:
-                    create_script = (f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}')")
-                    SubprocessServices.run_command(
-                        [blender_program, "-b", "--python-expr", create_script]
-                    )
-                    VersioningSystem.init_log(
-                        base_path=str(master_path),
-                        file_path=str(file_path),
-                        locked=True,
-                        timestamp=time.time(),
-                        author=self.user_id,
-                    )
+                self.create_and_replace_file()
 
         # check again if not exist return
         if not file_path.exists():
@@ -869,6 +856,8 @@ class HandleBLauncherPreview(QWidget):
         pass
 
     def create_and_replace_file(self):
+        self.ui.radioButton_showMaster.setChecked(True)
+        self.load_version(show_master=True)
         file_path = Path(self.selected_path)
         if (self.load_latest_log(str(file_path)) or {}).get(
             "locked", ""
@@ -885,57 +874,60 @@ class HandleBLauncherPreview(QWidget):
         # file_path.parent.mkdir(parents=True, exist_ok=True)
         # generate version
         init_version_path = VersioningSystem.get_init_version_path(str(file_path))
-        # init_version_path.parent.mkdir(parents=True, exist_ok=True)
+        init_version_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Zeroxe launcher
-        selected_item = self.ui.listWidget_list.currentItem()
-        if selected_item is None:
-            return ""
-        item_data = selected_item.data(Qt.ItemDataRole.UserRole)
-        shot_data = [i for i in self.shots if i["id"] == item_data.get("shot_id")]
-        if shot_data is None or len(shot_data) == 0:
-            return ""
-        shot_assets = AssetServices.get_assets_for_shot(shot_id=shot_data[0].get("id", ""))
-        shot_data[0]["assets"] = shot_assets
-        args = [
-            "python",
-            str(self.zeroxe_core),
-            json.dumps(self.zeroxe_conf),
-            json.dumps(shot_data[0]),
-            str(file_path),
-            str(init_version_path),
-        ]
-        process = subprocess.Popen(
-            args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        stdout, stderr = process.communicate()
-
-        generated_script = None
-        if process.returncode == 0:
-            generated_script = stdout
-            print("Successfully generated script!")
-        else:
-            print(f"Failed: {stderr}")
-
-        if not generated_script:
-            reply = QMessageBox.warning(
-                self,
-                "Warning",
-                "Builder script not found. Do you want to continue with an empty blend file?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+        if self.ui.comboBox_entity.currentIndex() == 1:
+            create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+        elif self.ui.comboBox_entity.currentIndex() == 2:
+            # Zeroxe launcher
+            selected_item = self.ui.listWidget_list.currentItem()
+            if selected_item is None:
+                return ""
+            item_data = selected_item.data(Qt.ItemDataRole.UserRole)
+            shot_data = [i for i in self.shots if i["id"] == item_data.get("shot_id")]
+            if shot_data is None or len(shot_data) == 0:
+                return ""
+            shot_assets = AssetServices.get_assets_for_shot(shot_id=shot_data[0].get("id", ""))
+            shot_data[0]["assets"] = shot_assets
+            args = [
+                "python",
+                str(self.zeroxe_core),
+                json.dumps(self.zeroxe_conf),
+                json.dumps(shot_data[0]),
+                str(file_path),
+                str(init_version_path),
+            ]
+            process = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
+            stdout, stderr = process.communicate()
 
-            if reply == QMessageBox.StandardButton.Yes:
-                # User chose to continue
-                init_version_path.parent.mkdir(parents=True, exist_ok=True)
-                create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+            generated_script = None
+            if process.returncode == 0:
+                generated_script = stdout
+                print("Successfully generated script!")
             else:
-                # User chose not to continue
-                return
-            # return
-        else:
-            create_script = generated_script
+                print(f"Failed: {stderr}")
+
+            if not generated_script:
+                reply = QMessageBox.warning(
+                    self,
+                    "Warning",
+                    "Builder script not found. Do you want to continue with an empty blend file?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    # User chose to continue
+                    init_version_path.parent.mkdir(parents=True, exist_ok=True)
+                    create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+                else:
+                    # User chose not to continue
+                    return
+                # return
+            else:
+                create_script = generated_script
 
         # Conttinue in here
         SubprocessServices.run_command(
@@ -945,13 +937,6 @@ class HandleBLauncherPreview(QWidget):
         VersioningSystem.init_log(
             base_path=str(master_path),
             file_path=str(file_path),
-            locked=True,
-            timestamp=time.time(),
-            author=self.user_id,
-        )
-        VersioningSystem.init_log(
-            base_path=str(master_path),
-            file_path=str(init_version_path),
             locked=True,
             timestamp=time.time(),
             author=self.user_id,
