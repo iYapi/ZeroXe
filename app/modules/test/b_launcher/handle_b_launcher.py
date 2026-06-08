@@ -257,6 +257,7 @@ class HandleBLauncherPreview(QWidget):
         master_path, _ = self.shot_or_asset_path()
         # file_path.parent.mkdir(parents=True, exist_ok=True)
         if not file_path.exists():
+            file_path.parent.mkdir(parents=True, exist_ok=True)
             model = self.ui.tableView_metadata.model()
             version_value = ""
             if model is not None:
@@ -265,21 +266,21 @@ class HandleBLauncherPreview(QWidget):
                         version_value = str(model.index(row, 1).data()).strip()
                         break
             if version_value in [None, "", "Master"]:
-                self.create_and_replace_file()
-            else:
-                create_script = (
-                    f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}')"
-                )
-                SubprocessServices.run_command(
-                    [blender_program, "-b", "--python-expr", create_script]
-                )
-                VersioningSystem.init_log(
-                    base_path=str(master_path),
-                    file_path=str(file_path),
-                    locked=True,
-                    timestamp=time.time(),
-                    author=self.user_id,
-                )
+                if self.ui.comboBox_entity.currentIndex() == 2:
+                    self.create_and_replace_file()
+                elif self.ui.comboBox_entity.currentIndex() == 1:
+                    create_script = (f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}')")
+                    SubprocessServices.run_command(
+                        [blender_program, "-b", "--python-expr", create_script]
+                    )
+                    VersioningSystem.init_log(
+                        base_path=str(master_path),
+                        file_path=str(file_path),
+                        locked=True,
+                        timestamp=time.time(),
+                        author=self.user_id,
+                    )
+
         # check again if not exist return
         if not file_path.exists():
             return
