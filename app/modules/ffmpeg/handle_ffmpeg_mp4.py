@@ -59,7 +59,7 @@ class HandleFFMPEGMP4(QWidget):
         """Enable drag and drop for folders to listView_available"""
         self.ui.listView_available.setAcceptDrops(True)
         self.ui.listView_available.setDragEnabled(True)
-        self.ui.listView_available.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+        self.ui.listView_available.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
 
         original_drag_enter = self.ui.listView_available.dragEnterEvent
         original_drop = self.ui.listView_available.dropEvent
