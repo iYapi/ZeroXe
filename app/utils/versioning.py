@@ -123,7 +123,7 @@ class VersioningSystem:
         return parent_dir / master_name
 
     @staticmethod
-    def get_init_version(master_path: str, version_number: int = 0, padding: int = 3):
+    def get_init_version(master_path: str, version_number: int = 1, padding: int = 3):
         path_obj = Path(master_path)
         base_name = path_obj.stem
         extension = path_obj.suffix
@@ -131,7 +131,7 @@ class VersioningSystem:
         return f"{base_name}_{Settings.VERSIONING_STARTWITH}{version_str}{extension}"
 
     @staticmethod
-    def get_init_version_path(master_path: str, version_number: int = 0, padding: int = 3):
+    def get_init_version_path(master_path: str, version_number: int = 1, padding: int = 3):
         path_obj = Path(master_path)
         version_dir = VersioningSystem.get_version_folder(str(path_obj.parent))    
         base_name = path_obj.stem
