@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QMessageBox,
     QFileDialog,
+    QButtonGroup
 )
 from gazu import project
 
@@ -112,6 +113,12 @@ class HandleBLauncherPreview(QWidget):
         )
         self.ui.checkBox_batch.toggled.connect(self.on_batch_checklist)
         self.ui.pushButton_batch.clicked.connect(self.generate_batch)
+
+        self.builderGroup = QButtonGroup(self)
+
+        self.builderGroup.addButton(self.ui.radioButton_builderType0, 0)
+        self.builderGroup.addButton(self.ui.radioButton_builderType1, 1)
+        self.builderGroup.addButton(self.ui.radioButton_builderType2, 2)
 
     def on_department_change(self):
         projects = ProjectServices.get_projects()
@@ -893,6 +900,7 @@ class HandleBLauncherPreview(QWidget):
                 str(self.zeroxe_core),
                 json.dumps(self.zeroxe_conf),
                 json.dumps(shot_data[0]),
+                str(self.builderGroup.checkedId()),
                 str(file_path),
                 str(init_version_path),
             ]

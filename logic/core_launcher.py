@@ -35,6 +35,7 @@ class CoreLauncher:
         shot_data: dict,
         output_file: str,
         version_output_file: str,
+        builder_mode: int
     ):
         self.data = department_data
         self.shot_data = shot_data
@@ -44,6 +45,10 @@ class CoreLauncher:
         new_stem = f"{prefix}_v{int(ver_str) + 1:03d}"
         new_path = p.with_name(new_stem + p.suffix)
         self.version_output_file = new_path
+        self.builder_mode_name = {
+            1: "previous",
+            2: "next",
+        }.get(builder_mode)
 
     # def __init__(self):
     # region Example Data
@@ -280,6 +285,14 @@ class CoreLauncher:
             .get("builder", {})
             .get("path")
         )
+        if self.builder_mode_name:
+            builder_script_path = (
+                self.data.get("departments", {})
+                .get(current_department, {})
+                .get("presets", {})
+                .get("second_builder", {})
+                .get("path")
+            )
 
         if builder_script_path:
             # Construct args
@@ -299,14 +312,18 @@ class CoreLauncher:
             }
             args = [
                 "python",
-                "/home/ptp-yp/Documents/project/Jetbrain/PyCharm/work/ZeroXe/logic/builder/02_blocking_animation_builder_option_B_from_previous_shot.py",
+                builder_script_path,
                 json.dumps(shot_data),
                 json.dumps(current_dept),
                 json.dumps(asset_dept),
                 json.dumps(mastershot_data),
                 json.dumps(addon_data),
-                json.dumps(filepath),
             ]
+
+            if self.builder_mode_name:
+                args.append(self.builder_mode_name)
+
+            args.append(json.dumps(filepath))
             process = subprocess.Popen(
                 args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
@@ -364,6 +381,7 @@ if __name__ == "__main__":
             sys.exit(1)
         department_data = json.loads(sys.argv[1])
         shot_data = json.loads(sys.argv[2])
+        builder_mode = int(sys.argv[3])
         final_file_path = sys.argv[-2]
         version_file_path = sys.argv[-1]
 
@@ -373,6 +391,7 @@ if __name__ == "__main__":
             shot_data=shot_data,
             output_file=final_file_path,
             version_output_file=version_file_path,
+            builder_mode=builder_mode
         )
         result = builder.create_file()
 

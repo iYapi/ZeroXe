@@ -92,31 +92,36 @@ class LayoutBuilder:
         # }
         # filepath = {"final": "", "version": ""}
         # endregion
-        
+
         # Create parent folder
-        Path(filepath['version']).parent.mkdir(parents=True, exist_ok=True)
+
+        Path(filepath["version"]).parent.mkdir(parents=True, exist_ok=True)
 
         # Get all asset list by asset type
         relative_assets = {}
         asset_types = asset_department["Asset"]["asset_type"]
         shot_assets_content = shot_data.get("assets", [])
         # Build lookup mapping for O(1) access
-        asset_type_map = {config["id"]: (category_key, config) for category_key, config in asset_types.items()}
+        asset_type_map = {
+            config["id"]: (category_key, config)
+            for category_key, config in asset_types.items()
+        }
+        print(shot_data)
 
         # Group assets by their category
         for asset in shot_assets_content:
             asset_type_id = asset["entity_type_id"]
             if asset_type_id in asset_type_map:
                 category_key, config = asset_type_map[asset_type_id]
-                
-                if category_key not in relative_assets and not category_key.startswith("MS_"):
-                    relative_assets[category_key] = {
-                        "assets": [],
-                        "base_path": config.get("base_path"),
-                        "prefix": config.get("prefix"),
-                        "code": config.get("code"),
-                    }
-                relative_assets[category_key]["assets"].append(asset["name"])
+                if not category_key.startswith("MS_"):
+                    if category_key not in relative_assets:
+                        relative_assets[category_key] = {
+                            "assets": [],
+                            "base_path": config.get("base_path"),
+                            "prefix": config.get("prefix"),
+                            "code": config.get("code"),
+                        }
+                    relative_assets[category_key]["assets"].append(asset["name"])
         # shot_data_content = shot_data.get("data", {})
         # for category_key, config in asset_types.items():
         #     lookup_key = category_key.lower()
@@ -130,7 +135,7 @@ class LayoutBuilder:
         #             "base_path": config.get("base_path"),
         #             "prefix": config.get("prefix"),
         #             "code": config.get("code"),
-        #         }  
+        #         }
 
         # Construct collection dict
         collections_dict = {}
@@ -145,7 +150,7 @@ class LayoutBuilder:
                 # Convert back to string for Blender's libraries.load
                 paths.append(str(full_path))
 
-            collections_dict[category] = paths
+            collections_dict[data["code"]] = paths
 
         # Get preset
         dept_data = next(iter(current_department.values()))
@@ -229,7 +234,7 @@ def link_collection(collections_dict):
 				else:
 					print(f"Collection '{collection_name}' not found in {asset_path}")
 					continue
-
+     
 			# Link the loaded collection into the category collection
 			for linked_collection in data_to.collections:
 				if linked_collection and linked_collection.name not in category_collection.children:
@@ -308,8 +313,12 @@ bpy.context.scene.render.fps = settings["fps"]
 bpy.context.scene.render.resolution_x = settings["resolution"][0]
 bpy.context.scene.render.resolution_y = settings["resolution"][1]
 
+bpy.context.scene.render.use_simplify = True
+bpy.context.scene.render.simplify_subdivision = 1
+
+bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=False, do_recursive=True)
 bpy.ops.wm.save_as_mainfile(filepath="$VERSION_PATH")
-bpy.ops.wm.save_as_mainfile(filepath="$FINAL_PATH", copy=True)
+
 		"""
             )
         )
@@ -317,6 +326,7 @@ bpy.ops.wm.save_as_mainfile(filepath="$FINAL_PATH", copy=True)
             dedent(
                 """
 bpy.ops.wm.save_as_mainfile(filepath="$VERSION_PATH")
+bpy.ops.wm.save_as_mainfile(filepath="$FINAL_PATH", copy=True)
 
 bpy.ops.wm.quit_blender()
 		"""
@@ -329,7 +339,9 @@ bpy.ops.wm.quit_blender()
             VERSION_PATH=version_path,
             FINAL_PATH=filepath,
         )
-        end_script = end_script.substitute(VERSION_PATH=version_path)
+        end_script = end_script.substitute(
+            VERSION_PATH=version_path, FINAL_PATH=filepath
+        )
         script_path = setting_data.get("script_path")
         if script_path:
             with open(script_path, "r") as f:
@@ -337,7 +349,8 @@ bpy.ops.wm.quit_blender()
                 script = script + "\n\n" + preset_code + "\n\n"
         script = script + end_script
         return script
-    
+
+
 if __name__ == "__main__":
     # 1. Capture arguments from subprocess
     # We expect JSON strings for the dictionaries
@@ -354,7 +367,7 @@ if __name__ == "__main__":
 
         # 3. Print the result so the subprocess can "catch" it
         print(result)
-        
+
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)

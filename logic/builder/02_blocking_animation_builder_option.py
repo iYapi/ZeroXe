@@ -6,66 +6,10 @@ from textwrap import dedent
 
 
 class BlockingAnimationBuilder:
-    """
-    OPTION B: source = the PREVIOUS shot's own Animation file in the same
-    sequence, instead of this shot's Blocking file.
-
-    Example: current shot "sh0020" -> source becomes shot "sh0010"'s final
-    animation blend (same episode/sequence, same department/code).
-
-    Useful when a shot should inherit continuity (character position, props
-    in hand, camera framing, etc.) directly from the shot right before it,
-    rather than starting fresh from Blocking.
-    """
-
-    # How much the numeric part of the shot name decreases to find the
-    # "previous" shot. Matches this project's shot numbering convention
-    # (sh0010, sh0020, sh0030, ...).
     SHOT_NUMBER_STEP = 10
-
-    # Fixed asset-library config for this project (id/code/base_path per asset
-    # type, taken from the project config's Asset.asset_type section). Kept as
-    # a constant here instead of a new CLI argument so the script's input
-    # contract (shot_info, current_department, filepath) is unchanged.
-    #
-    # "id" is the entity_type_id used on each entry inside shot_data['assets']
-    # -- that's how we know which bucket (chr/prp/set/vhc) an asset belongs to.
-    ASSET_TYPES = {
-        "CHAR": {
-            "id": "3810b978-8a0f-46d7-8ac9-51243507fc3a",
-            "code": "chr",
-            "base_path": "/mnt/I/20260222_melangkah_dari_timur/02_production/01_asset/01_char/",
-        },
-        "PROPS": {
-            "id": "4f34e37a-a6a3-4571-857f-212434f82e3a",
-            "code": "prp",
-            "base_path": "/mnt/I/20260222_melangkah_dari_timur/02_production/01_asset/02_prop/",
-        },
-        "SET": {
-            "id": "44b7cabe-af80-4784-bb32-5c3cf7b05f4a",
-            "code": "set",
-            "base_path": "/mnt/I/20260222_melangkah_dari_timur/02_production/01_asset/03_set/",
-        },
-        "VEHICLE": {
-            "id": "5a1b1c9f-12f2-493a-91af-dbc6fcfe9461",
-            "code": "vhc",
-            "base_path": "/mnt/I/20260222_melangkah_dari_timur/02_production/01_asset/04_vehicle/",
-        },
-        # MS_COMP / MS_LIT intentionally NOT included -- this builder doesn't
-        # link mastershot comp/lit assets, per earlier instruction.
-    }
 
     @staticmethod
     def _replace_shot_token(path_component, current_name, prev_name):
-        """
-        Replace `current_name` with `prev_name` only when it appears as an
-        EXACT underscore-delimited token (e.g. the "sh0020" in
-        "ep998_sq01_sh0020" or "mdt_ep998_sq01_sh0020_anm"). This guarantees
-        the department code token ("anm", "blk", ...) is never touched, even
-        if it happened to share characters with the shot name.
-
-        Returns (new_component, was_replaced).
-        """
         parts = path_component.split("_")
         replaced = False
         new_parts = []
@@ -77,75 +21,47 @@ class BlockingAnimationBuilder:
                 new_parts.append(part)
         return "_".join(new_parts), replaced
 
-    def _resolve_previous_shot_source(self, shot_data, filepath):
-        """
-        Derive the source blend path by swapping this shot's name TOKEN for
-        the previous shot's name token, inside both the parent folder name
-        and the filename of this shot's own (Animation) final-file path:
+    def _resolve_scan_source(self, filepath, direction="previous"):
+        final_path = Path(filepath["final"])
 
-          .../04_animation/ep998/ep998_sq01/ep998_sq01_sh0020/mdt_ep998_sq01_sh0020_anm.blend
-          ->
-          .../04_animation/ep998/ep998_sq01/ep998_sq01_sh0010/mdt_ep998_sq01_sh0010_anm.blend
+        current_folder = final_path.parent
+        parent_folder = current_folder.parent
 
-        Because filepath['final'] is always this shot's ANIMATION target
-        (never Blocking), and only the exact "shNNNN" token is swapped, the
-        resolved path always stays in the Animation department ("_anm.blend")
-        -- it can never resolve to a "_blk.blend" file.
+        folders = sorted(
+            p for p in parent_folder.iterdir()
+            if p.is_dir()
+        )
 
-        Falls back to filepath['source'] (which your pipeline sets to the
-        Blocking file) ONLY when there genuinely is no previous shot to
-        source from:
-          - the shot name has no trailing number, or
-          - this is already the first shot in the sequence (prev <= 0), or
-          - the shot-name token isn't found in the final path at all
-            (unexpected naming -> fail safe rather than guess).
+        try:
+            index = folders.index(current_folder)
+        except ValueError:
+            return filepath.get("source", ""), "current-folder-not-found"
 
-        A "# source-resolution: ..." comment is embedded in the returned
-        script marker so it's obvious in the generated code which case fired
-        -- no more silent fallbacks.
-        """
-        current_name = (shot_data or {}).get("name", "") or ""
-        match = re.match(r"^(.*?)(\d+)$", current_name)
-        if not match:
-            return filepath.get("source", ""), "no-trailing-number-in-shot-name"
+        if direction == "previous":
+            if index == 0:
+                return filepath.get("source", ""), "no-previous-folder"
+            target_folder = folders[index - 1]
 
-        prefix, digits = match.groups()
-        width = len(digits)
-        prev_number = int(digits) - self.SHOT_NUMBER_STEP
-        if prev_number <= 0:
-            # first shot in the sequence, no previous shot to source from
-            return filepath.get("source", ""), "first-shot-in-sequence"
+        elif direction == "next":
+            if index >= len(folders) - 1:
+                return filepath.get("source", ""), "no-next-folder"
+            target_folder = folders[index + 1]
 
-        prev_name = f"{prefix}{str(prev_number).zfill(width)}"
+        else:
+            return filepath.get("source", ""), "invalid-direction"
 
-        final_path = Path(filepath.get("final", ""))
-        new_folder, folder_replaced = self._replace_shot_token(final_path.parent.name, current_name, prev_name)
-        new_stem, stem_replaced = self._replace_shot_token(final_path.stem, current_name, prev_name)
+        # Replace the current shot folder name inside the blend filename
+        blend_name = final_path.name.replace(current_folder.name, target_folder.name)
 
-        if not (folder_replaced and stem_replaced):
-            # shot-name token wasn't found where expected -> don't guess, fail safe
-            return filepath.get("source", ""), "shot-token-not-found-in-final-path"
+        blend_file = target_folder / blend_name
 
-        resolved = final_path.parent.with_name(new_folder) / f"{new_stem}{final_path.suffix}"
-        return str(resolved), "resolved-from-previous-shot"
+        return str(blend_file), "resolved-by-scan"
 
-    def _get_required_assets(self, shot_data):
-        """
-        Build a dict of assets that MUST be linked/overridden in the generated
-        shot file, based on shot_data['assets'] -- the actual list of asset
-        entities cast to this shot. Each entry looks like:
-
-            {"name": "c-baha", "entity_type_id": "3810b978-...", ...}
-
-        `entity_type_id` is matched against ASSET_TYPES[*]['id'] to know which
-        bucket (chr/prp/set/vhc) the asset belongs to. Assets whose type isn't
-        one of CHAR/PROPS/SET/VEHICLE (e.g. MS_COMP/MS_LIT mastershots) are
-        skipped -- this builder doesn't link those.
-        """
+    def _get_required_assets(self, shot_data, asset_types):
         required = {}
         assets = (shot_data or {}).get("assets", []) or []
 
-        type_by_id = {type_cfg["id"]: type_cfg for type_cfg in self.ASSET_TYPES.values()}
+        type_by_id = {type_cfg["id"]: type_cfg for type_cfg in asset_types.values()}
 
         for asset in assets:
             type_cfg = type_by_id.get(asset.get("entity_type_id"))
@@ -163,24 +79,7 @@ class BlockingAnimationBuilder:
 
         return required
 
-    def _build_sync_script(self, required_assets):
-        """
-        Build the Blender-side python snippet that:
-          1. Links + library-overrides every required asset that isn't already
-             present, placing it inside the collection matching its asset type
-             (chr / prp / set / vhc).
-          2. Lists EVERY linked library (.blend file) currently in the shot
-             file and removes/unlinks any that this shot's asset list no
-             longer needs -- regardless of where the library lives, so
-             nothing stale is left behind.
-
-        Matching is done by the asset's SOURCE LIBRARY FILEPATH, not by
-        collection/object name. Names can drift (Blender renames on conflict,
-        e.g. "c-baha.001", or the asset was linked by a different tool that
-        used its own naming), but the filepath the data was linked from is
-        stable -- so this is the only reliable way to know whether an
-        already-linked asset is still the one this shot actually needs.
-        """
+    def _build_sync_script(self, required_assets, setting_data):
         required_json = json.dumps(required_assets)
 
         return dedent(f"""
@@ -188,6 +87,9 @@ class BlockingAnimationBuilder:
             import os
 
             REQUIRED_ASSETS = {required_json}
+
+            if bpy.context.active_object and bpy.context.active_object.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
 
             def _norm(path):
                 if not path:
@@ -292,9 +194,21 @@ class BlockingAnimationBuilder:
             for lib in list(bpy.data.libraries):
                 if lib.users_id == 0:
                     bpy.data.libraries.remove(lib)
+                    
+            settings = {setting_data}
+            bpy.context.scene.frame_end = settings["frame_out"]
+            bpy.context.scene.frame_start = settings["frame_in"]
+            bpy.context.scene.render.fps = settings["fps"]
+            bpy.context.scene.render.resolution_x = settings["resolution"][0]
+            bpy.context.scene.render.resolution_y = settings["resolution"][1]
+            
+            bpy.context.scene.render.use_simplify = True
+            bpy.context.scene.render.simplify_subdivision = 1
+            
+            bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=False, do_recursive=True)
         """)
 
-    def extract_data(self, shot_data, current_department, filepath):
+    def extract_data(self, asset_department, shot_data, current_department, filepath, builder_type):
         # Entry data
         # region Example Data
         # shot_data = {
@@ -326,7 +240,7 @@ class BlockingAnimationBuilder:
 
         # Resolve the actual source: previous shot's animation file (falls back
         # to filepath['source'] only when there's genuinely no previous shot)
-        source_path, source_reason = self._resolve_previous_shot_source(shot_data, filepath)
+        source_path, source_reason = self._resolve_scan_source(filepath, builder_type)
 
         start_script = (
             f"# source-resolution: {source_reason}\n"
@@ -339,9 +253,31 @@ class BlockingAnimationBuilder:
             f"bpy.ops.wm.save_as_mainfile(filepath='{filepath['version']}')"
         )
 
-        # Sync linked assets     (unlink/remove what's no longer needed, link+override what's missing)
-        required_assets = self._get_required_assets(shot_data)
-        sync_script = self._build_sync_script(required_assets)
+        # Get preset
+        dept_data = next(iter(current_department.values()))
+        preset_name = "playblast"
+        preset_path = dept_data.get("presets", {}).get(preset_name, {}).get("path")
+
+        # Construct shot metadata
+        frame_in = int(shot_data.get("data", {}).get("frame_in", "0"))
+        frame_out = int(shot_data.get("data", {}).get("frame_out", "0"))
+        fps = int(shot_data.get("data", {}).get("fps", "24"))
+        res_str = str(shot_data.get("data", {}).get("resolution", "1920x1080"))
+        resolution = (
+            [int(res.strip()) for res in res_str.split("x")] if "x" in res_str else []
+        )
+        setting_data = {
+            "frame_in": frame_in,
+            "frame_out": frame_out,
+            "fps": fps,
+            "resolution": resolution,
+            "script_path": preset_path,
+        }
+
+        # Sync linked assets (unlink/remove what's no longer needed, link+override what's missing)
+        asset_types = asset_department["Asset"]["asset_type"]
+        required_assets = self._get_required_assets(shot_data, asset_types)
+        sync_script = self._build_sync_script(required_assets, setting_data)
 
         # Apply preset
         dept_data = next(iter(current_department.values()))
@@ -364,10 +300,12 @@ if __name__ == "__main__":
     try:
         shot_info = json.loads(sys.argv[1])
         current_dept = json.loads(sys.argv[2])
+        asset_dept = json.loads(sys.argv[3])
+        builder_mode = str(sys.argv[-2])
         file_paths = json.loads(sys.argv[-1])
 
         builder = BlockingAnimationBuilder()
-        result = builder.extract_data(shot_info, current_dept, file_paths)
+        result = builder.extract_data(asset_dept, shot_info, current_dept, file_paths, builder_mode)
 
         print(result)
 

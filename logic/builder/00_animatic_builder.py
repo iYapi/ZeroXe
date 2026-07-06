@@ -4,11 +4,12 @@ from pathlib import Path
 from textwrap import dedent
 from string import Template
 
+
 class AnimaticBuilder:
     def extract_data(self, filepath):
-        Path(filepath['version']).parent.mkdir(parents=True, exist_ok=True)
+        Path(filepath["version"]).parent.mkdir(parents=True, exist_ok=True)
         return "import bpy"
-        
+
 
 if __name__ == "__main__":
     # 1. Capture arguments from subprocess
@@ -23,9 +24,7 @@ if __name__ == "__main__":
 
         # 2. Run the logic
         builder = AnimaticBuilder()
-        result = builder.extract_data(
-            filepath=file_paths
-        )
+        result = builder.extract_data(filepath=file_paths)
 
         # 3. Print the result so the subprocess can "catch" it
         print(result)
