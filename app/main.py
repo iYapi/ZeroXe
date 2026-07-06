@@ -88,7 +88,7 @@ class MainUI(QMainWindow):
 
     @staticmethod
     def print_log(checked):
-        Settings().print_log = checked
+        Settings.print_log = checked
 
     @staticmethod
     def load_saved_login():
