@@ -25,6 +25,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QRadioButton" name="radioButton_printLog">
+        <property name="text">
+         <string>Log</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="horizontalSpacer_footer">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
@@ -111,7 +118,7 @@
      <x>0</x>
      <y>0</y>
      <width>756</width>
-     <height>30</height>
+     <height>27</height>
     </rect>
    </property>
   </widget>
