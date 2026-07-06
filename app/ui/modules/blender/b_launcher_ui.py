@@ -17,6 +17,108 @@ class Ui_Form(object):
         self.gridLayout.setObjectName("gridLayout")
         self.gridLayout_main = QtWidgets.QGridLayout()
         self.gridLayout_main.setObjectName("gridLayout_main")
+        self.verticalWidget_search = QtWidgets.QWidget(parent=Form)
+        self.verticalWidget_search.setStyleSheet("/* The main box */\n"
+"QComboBox {\n"
+"    border: 1px solid #3d3d3d;\n"
+"    border-radius: 5px; /* macOS uses approx 5-6px */\n"
+"    padding: 4px 10px 4px 10px;\n"
+"    font-size: 13px;\n"
+"}\n"
+"\n"
+"/* The container for the arrow */\n"
+"QComboBox::drop-down {\n"
+"    subcontrol-origin: padding;\n"
+"    subcontrol-position: top right;\n"
+"    width: 20px;\n"
+"    border-left: none;\n"
+"}\n"
+"\n"
+"/* The macOS Chevron (Simplified) */\n"
+"QComboBox::down-arrow {\n"
+"    border-left: 4px solid transparent;\n"
+"    border-right: 4px solid transparent;\n"
+"    border-top: 5px solid #BBBBBB;\n"
+"    margin-right: 8px;\n"
+"}\n"
+"")
+        self.verticalWidget_search.setObjectName("verticalWidget_search")
+        self.verticalLayout_search = QtWidgets.QVBoxLayout(self.verticalWidget_search)
+        self.verticalLayout_search.setObjectName("verticalLayout_search")
+        self.label = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        font = QtGui.QFont()
+        font.setPointSize(16)
+        font.setBold(True)
+        self.label.setFont(font)
+        self.label.setObjectName("label")
+        self.verticalLayout_search.addWidget(self.label)
+        self.verticalLayout_department = QtWidgets.QVBoxLayout()
+        self.verticalLayout_department.setObjectName("verticalLayout_department")
+        self.label_department = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        self.label_department.setObjectName("label_department")
+        self.verticalLayout_department.addWidget(self.label_department)
+        self.comboBox_department = QtWidgets.QComboBox(parent=self.verticalWidget_search)
+        self.comboBox_department.setObjectName("comboBox_department")
+        self.verticalLayout_department.addWidget(self.comboBox_department)
+        self.verticalLayout_search.addLayout(self.verticalLayout_department)
+        self.verticalLayout_project = QtWidgets.QVBoxLayout()
+        self.verticalLayout_project.setObjectName("verticalLayout_project")
+        self.label_project = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        self.label_project.setObjectName("label_project")
+        self.verticalLayout_project.addWidget(self.label_project)
+        self.comboBox_project = QtWidgets.QComboBox(parent=self.verticalWidget_search)
+        self.comboBox_project.setObjectName("comboBox_project")
+        self.verticalLayout_project.addWidget(self.comboBox_project)
+        self.verticalLayout_search.addLayout(self.verticalLayout_project)
+        self.verticalLayout_entity = QtWidgets.QVBoxLayout()
+        self.verticalLayout_entity.setObjectName("verticalLayout_entity")
+        self.label_entity = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        self.label_entity.setObjectName("label_entity")
+        self.verticalLayout_entity.addWidget(self.label_entity)
+        self.comboBox_entity = QtWidgets.QComboBox(parent=self.verticalWidget_search)
+        self.comboBox_entity.setObjectName("comboBox_entity")
+        self.verticalLayout_entity.addWidget(self.comboBox_entity)
+        self.verticalLayout_search.addLayout(self.verticalLayout_entity)
+        self.verticalLayout_episode = QtWidgets.QVBoxLayout()
+        self.verticalLayout_episode.setObjectName("verticalLayout_episode")
+        self.label_episode = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        self.label_episode.setObjectName("label_episode")
+        self.verticalLayout_episode.addWidget(self.label_episode)
+        self.comboBox_episode = QtWidgets.QComboBox(parent=self.verticalWidget_search)
+        self.comboBox_episode.setObjectName("comboBox_episode")
+        self.verticalLayout_episode.addWidget(self.comboBox_episode)
+        self.verticalLayout_search.addLayout(self.verticalLayout_episode)
+        self.verticalLayout_type = QtWidgets.QVBoxLayout()
+        self.verticalLayout_type.setObjectName("verticalLayout_type")
+        self.label_type = QtWidgets.QLabel(parent=self.verticalWidget_search)
+        self.label_type.setObjectName("label_type")
+        self.verticalLayout_type.addWidget(self.label_type)
+        self.comboBox_type = QtWidgets.QComboBox(parent=self.verticalWidget_search)
+        self.comboBox_type.setObjectName("comboBox_type")
+        self.verticalLayout_type.addWidget(self.comboBox_type)
+        self.verticalLayout_search.addLayout(self.verticalLayout_type)
+        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.verticalLayout_search.addItem(spacerItem)
+        self.gridLayout_main.addWidget(self.verticalWidget_search, 0, 1, 1, 1)
+        self.verticalWidget_version = QtWidgets.QWidget(parent=Form)
+        self.verticalWidget_version.setStyleSheet(".QListWidget {\n"
+"border-radius: 5%;\n"
+"border: 1px solid black;\n"
+"}\n"
+"")
+        self.verticalWidget_version.setObjectName("verticalWidget_version")
+        self.verticalLayout_version = QtWidgets.QVBoxLayout(self.verticalWidget_version)
+        self.verticalLayout_version.setObjectName("verticalLayout_version")
+        self.label_version = QtWidgets.QLabel(parent=self.verticalWidget_version)
+        self.label_version.setObjectName("label_version")
+        self.verticalLayout_version.addWidget(self.label_version)
+        self.radioButton_showMaster = QtWidgets.QRadioButton(parent=self.verticalWidget_version)
+        self.radioButton_showMaster.setObjectName("radioButton_showMaster")
+        self.verticalLayout_version.addWidget(self.radioButton_showMaster)
+        self.listWidget_version = QtWidgets.QListWidget(parent=self.verticalWidget_version)
+        self.listWidget_version.setObjectName("listWidget_version")
+        self.verticalLayout_version.addWidget(self.listWidget_version)
+        self.gridLayout_main.addWidget(self.verticalWidget_version, 1, 2, 1, 1)
         self.gridLayout_function = QtWidgets.QGridLayout()
         self.gridLayout_function.setObjectName("gridLayout_function")
         self.gridLayout_builderType = QtWidgets.QGridLayout()
@@ -110,8 +212,8 @@ class Ui_Form(object):
         self.pushButton_unlock = QtWidgets.QPushButton(parent=Form)
         self.pushButton_unlock.setObjectName("pushButton_unlock")
         self.gridLayout_function.addWidget(self.pushButton_unlock, 8, 0, 1, 2)
-        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
-        self.gridLayout_function.addItem(spacerItem, 1, 0, 1, 2)
+        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.gridLayout_function.addItem(spacerItem1, 1, 0, 1, 2)
         self.pushButton_replace = QtWidgets.QPushButton(parent=Form)
         self.pushButton_replace.setStyleSheet(".QPushButton {\n"
 "    border: none;\n"
@@ -134,8 +236,11 @@ class Ui_Form(object):
 "}")
         self.pushButton_replace.setObjectName("pushButton_replace")
         self.gridLayout_function.addWidget(self.pushButton_replace, 6, 0, 1, 2)
-        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
-        self.gridLayout_function.addItem(spacerItem1, 3, 0, 1, 2)
+        self.line = QtWidgets.QFrame(parent=Form)
+        self.line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        self.line.setObjectName("line")
+        self.gridLayout_function.addWidget(self.line, 3, 0, 1, 2)
         self.gridLayout_main.addLayout(self.gridLayout_function, 1, 1, 1, 1)
         self.gridWidget_metadata = QtWidgets.QWidget(parent=Form)
         self.gridWidget_metadata.setStyleSheet(".QTableView {\n"
@@ -158,25 +263,6 @@ class Ui_Form(object):
         self.tableView_metadata.setObjectName("tableView_metadata")
         self.gridLayout_metadata.addWidget(self.tableView_metadata, 1, 0, 1, 1)
         self.gridLayout_main.addWidget(self.gridWidget_metadata, 0, 2, 1, 1)
-        self.verticalWidget_version = QtWidgets.QWidget(parent=Form)
-        self.verticalWidget_version.setStyleSheet(".QListWidget {\n"
-"border-radius: 5%;\n"
-"border: 1px solid black;\n"
-"}\n"
-"")
-        self.verticalWidget_version.setObjectName("verticalWidget_version")
-        self.verticalLayout_version = QtWidgets.QVBoxLayout(self.verticalWidget_version)
-        self.verticalLayout_version.setObjectName("verticalLayout_version")
-        self.label_version = QtWidgets.QLabel(parent=self.verticalWidget_version)
-        self.label_version.setObjectName("label_version")
-        self.verticalLayout_version.addWidget(self.label_version)
-        self.radioButton_showMaster = QtWidgets.QRadioButton(parent=self.verticalWidget_version)
-        self.radioButton_showMaster.setObjectName("radioButton_showMaster")
-        self.verticalLayout_version.addWidget(self.radioButton_showMaster)
-        self.listWidget_version = QtWidgets.QListWidget(parent=self.verticalWidget_version)
-        self.listWidget_version.setObjectName("listWidget_version")
-        self.verticalLayout_version.addWidget(self.listWidget_version)
-        self.gridLayout_main.addWidget(self.verticalWidget_version, 1, 2, 1, 1)
         self.verticalWidget_list = QtWidgets.QWidget(parent=Form)
         self.verticalWidget_list.setStyleSheet(".QListWidget {\n"
 "border-radius: 5%;\n"
@@ -202,89 +288,6 @@ class Ui_Form(object):
         self.listWidget_list.setObjectName("listWidget_list")
         self.verticalLayout_list.addWidget(self.listWidget_list)
         self.gridLayout_main.addWidget(self.verticalWidget_list, 0, 0, 2, 1)
-        self.verticalWidget_search = QtWidgets.QWidget(parent=Form)
-        self.verticalWidget_search.setStyleSheet("/* The main box */\n"
-"QComboBox {\n"
-"    border: 1px solid #3d3d3d;\n"
-"    border-radius: 5px; /* macOS uses approx 5-6px */\n"
-"    padding: 4px 10px 4px 10px;\n"
-"    font-size: 13px;\n"
-"}\n"
-"\n"
-"/* The container for the arrow */\n"
-"QComboBox::drop-down {\n"
-"    subcontrol-origin: padding;\n"
-"    subcontrol-position: top right;\n"
-"    width: 20px;\n"
-"    border-left: none;\n"
-"}\n"
-"\n"
-"/* The macOS Chevron (Simplified) */\n"
-"QComboBox::down-arrow {\n"
-"    border-left: 4px solid transparent;\n"
-"    border-right: 4px solid transparent;\n"
-"    border-top: 5px solid #BBBBBB;\n"
-"    margin-right: 8px;\n"
-"}\n"
-"")
-        self.verticalWidget_search.setObjectName("verticalWidget_search")
-        self.verticalLayout_search = QtWidgets.QVBoxLayout(self.verticalWidget_search)
-        self.verticalLayout_search.setObjectName("verticalLayout_search")
-        self.label = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        font = QtGui.QFont()
-        font.setPointSize(16)
-        font.setBold(True)
-        self.label.setFont(font)
-        self.label.setObjectName("label")
-        self.verticalLayout_search.addWidget(self.label)
-        self.verticalLayout_department = QtWidgets.QVBoxLayout()
-        self.verticalLayout_department.setObjectName("verticalLayout_department")
-        self.label_department = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        self.label_department.setObjectName("label_department")
-        self.verticalLayout_department.addWidget(self.label_department)
-        self.comboBox_department = QtWidgets.QComboBox(parent=self.verticalWidget_search)
-        self.comboBox_department.setObjectName("comboBox_department")
-        self.verticalLayout_department.addWidget(self.comboBox_department)
-        self.verticalLayout_search.addLayout(self.verticalLayout_department)
-        self.verticalLayout_project = QtWidgets.QVBoxLayout()
-        self.verticalLayout_project.setObjectName("verticalLayout_project")
-        self.label_project = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        self.label_project.setObjectName("label_project")
-        self.verticalLayout_project.addWidget(self.label_project)
-        self.comboBox_project = QtWidgets.QComboBox(parent=self.verticalWidget_search)
-        self.comboBox_project.setObjectName("comboBox_project")
-        self.verticalLayout_project.addWidget(self.comboBox_project)
-        self.verticalLayout_search.addLayout(self.verticalLayout_project)
-        self.verticalLayout_entity = QtWidgets.QVBoxLayout()
-        self.verticalLayout_entity.setObjectName("verticalLayout_entity")
-        self.label_entity = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        self.label_entity.setObjectName("label_entity")
-        self.verticalLayout_entity.addWidget(self.label_entity)
-        self.comboBox_entity = QtWidgets.QComboBox(parent=self.verticalWidget_search)
-        self.comboBox_entity.setObjectName("comboBox_entity")
-        self.verticalLayout_entity.addWidget(self.comboBox_entity)
-        self.verticalLayout_search.addLayout(self.verticalLayout_entity)
-        self.verticalLayout_episode = QtWidgets.QVBoxLayout()
-        self.verticalLayout_episode.setObjectName("verticalLayout_episode")
-        self.label_episode = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        self.label_episode.setObjectName("label_episode")
-        self.verticalLayout_episode.addWidget(self.label_episode)
-        self.comboBox_episode = QtWidgets.QComboBox(parent=self.verticalWidget_search)
-        self.comboBox_episode.setObjectName("comboBox_episode")
-        self.verticalLayout_episode.addWidget(self.comboBox_episode)
-        self.verticalLayout_search.addLayout(self.verticalLayout_episode)
-        self.verticalLayout_type = QtWidgets.QVBoxLayout()
-        self.verticalLayout_type.setObjectName("verticalLayout_type")
-        self.label_type = QtWidgets.QLabel(parent=self.verticalWidget_search)
-        self.label_type.setObjectName("label_type")
-        self.verticalLayout_type.addWidget(self.label_type)
-        self.comboBox_type = QtWidgets.QComboBox(parent=self.verticalWidget_search)
-        self.comboBox_type.setObjectName("comboBox_type")
-        self.verticalLayout_type.addWidget(self.comboBox_type)
-        self.verticalLayout_search.addLayout(self.verticalLayout_type)
-        spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
-        self.verticalLayout_search.addItem(spacerItem2)
-        self.gridLayout_main.addWidget(self.verticalWidget_search, 0, 1, 1, 1)
         self.gridLayout.addLayout(self.gridLayout_main, 0, 0, 1, 1)
 
         self.retranslateUi(Form)
@@ -293,6 +296,19 @@ class Ui_Form(object):
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate
         Form.setWindowTitle(_translate("Form", "Form"))
+        self.label.setText(_translate("Form", "Select First"))
+        self.label_department.setText(_translate("Form", "Department"))
+        self.comboBox_department.setPlaceholderText(_translate("Form", "-- Select Department --"))
+        self.label_project.setText(_translate("Form", "Project"))
+        self.comboBox_project.setPlaceholderText(_translate("Form", "-- Select Project --"))
+        self.label_entity.setText(_translate("Form", "Entity"))
+        self.comboBox_entity.setPlaceholderText(_translate("Form", "-- Select Entity --"))
+        self.label_episode.setText(_translate("Form", "Episode"))
+        self.comboBox_episode.setPlaceholderText(_translate("Form", "-- Select Episode --"))
+        self.label_type.setText(_translate("Form", "Type"))
+        self.comboBox_type.setPlaceholderText(_translate("Form", "-- Select Type --"))
+        self.label_version.setText(_translate("Form", "Version"))
+        self.radioButton_showMaster.setText(_translate("Form", "Show Master"))
         self.radioButton_builderType1.setText(_translate("Form", "Previous"))
         self.radioButton_builderType2.setText(_translate("Form", "Next"))
         self.radioButton_builderType0.setText(_translate("Form", "Default"))
@@ -308,18 +324,5 @@ class Ui_Form(object):
         self.pushButton_replace.setText(_translate("Form", "Replace"))
         self.label_metadata.setText(_translate("Form", "Metadata"))
         self.label_task.setText(_translate("Form", "Task"))
-        self.label_version.setText(_translate("Form", "Version"))
-        self.radioButton_showMaster.setText(_translate("Form", "Show Master"))
         self.lineEdit_list.setToolTip(_translate("Form", "Search Shot/Asset"))
         self.lineEdit_list.setPlaceholderText(_translate("Form", "Search Shot"))
-        self.label.setText(_translate("Form", "Select First"))
-        self.label_department.setText(_translate("Form", "Department"))
-        self.comboBox_department.setPlaceholderText(_translate("Form", "-- Select Department --"))
-        self.label_project.setText(_translate("Form", "Project"))
-        self.comboBox_project.setPlaceholderText(_translate("Form", "-- Select Project --"))
-        self.label_entity.setText(_translate("Form", "Entity"))
-        self.comboBox_entity.setPlaceholderText(_translate("Form", "-- Select Entity --"))
-        self.label_episode.setText(_translate("Form", "Episode"))
-        self.comboBox_episode.setPlaceholderText(_translate("Form", "-- Select Episode --"))
-        self.label_type.setText(_translate("Form", "Type"))
-        self.comboBox_type.setPlaceholderText(_translate("Form", "-- Select Type --"))
