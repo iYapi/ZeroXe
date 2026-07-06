@@ -876,9 +876,8 @@ class HandleBLauncherPreview(QWidget):
         init_version_path = VersioningSystem.get_init_version_path(str(file_path))
         init_version_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if self.ui.comboBox_entity.currentIndex() == 1:
-            create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
-        elif self.ui.comboBox_entity.currentIndex() == 2:
+        create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+        if self.ui.comboBox_entity.currentIndex() == 2:
             # Zeroxe launcher
             selected_item = self.ui.listWidget_list.currentItem()
             if selected_item is None:
@@ -928,6 +927,9 @@ class HandleBLauncherPreview(QWidget):
                 # return
             else:
                 create_script = generated_script
+
+        if Settings().print_log:
+            print(create_script)
 
         # Conttinue in here
         SubprocessServices.run_command(

@@ -33,6 +33,8 @@ class Settings:
     os.makedirs(FILES_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(AVATAR_FILE), exist_ok=True)
 
+    print_log = False
+
     def __init__(self):
         env_paths = [
             os.path.join(os.path.dirname(__file__), '.env'),  # Same directory as this file

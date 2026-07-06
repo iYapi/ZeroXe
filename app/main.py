@@ -61,6 +61,9 @@ class MainUI(QMainWindow):
         self.ui.tabWidget.addTab(HandleFFMPEGMP4(), "ffmpegMP4")
         self.ui.tabWidget.addTab(HandleSetupDepartment(), "Setup(preview)")
         self.ui.tabWidget.addTab(HandleClPlayblast(), "ClPlayblast")
+        self.ui.radioButton_printLog.toggled.connect(
+            lambda checked: self.print_log(checked)
+        )
 
 # PyQt Program =====================================================================================
     def handle_logout(self):
@@ -82,6 +85,10 @@ class MainUI(QMainWindow):
             self.ui.label_userimage.setScaledContents(True)
         else:
             print(f"[-] Failed to load avatar image from: {file_path}")
+
+    @staticmethod
+    def print_log(checked):
+        Settings().print_log = checked
 
     @staticmethod
     def load_saved_login():
