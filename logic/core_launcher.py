@@ -39,7 +39,11 @@ class CoreLauncher:
         self.data = department_data
         self.shot_data = shot_data
         self.output_file = output_file
-        self.version_output_file = version_output_file
+        p = Path(version_output_file)
+        prefix, ver_str = p.stem.rsplit('_v', 1)
+        new_stem = f"{prefix}_v{int(ver_str) + 1:03d}"
+        new_path = p.with_name(new_stem + p.suffix)
+        self.version_output_file = new_path
 
     # def __init__(self):
     # region Example Data
@@ -295,7 +299,7 @@ class CoreLauncher:
             }
             args = [
                 "python",
-                builder_script_path,
+                "/home/ptp-yp/Documents/project/Jetbrain/PyCharm/work/ZeroXe/logic/builder/02_blocking_animation_builder_option_B_from_previous_shot.py",
                 json.dumps(shot_data),
                 json.dumps(current_dept),
                 json.dumps(asset_dept),
@@ -349,8 +353,14 @@ if __name__ == "__main__":
     # We expect JSON strings for the dictionaries
     try:
         if len(sys.argv) < 5:
-            print(f"Core Error: Expected 4 arguments, got {len(sys.argv)-1}", file=sys.stderr)
-            print("Usage: python script.py <department_json> <shot_json> <final_path> <version_path>", file=sys.stderr)
+            print(
+                f"Core Error: Expected 4 arguments, got {len(sys.argv) - 1}",
+                file=sys.stderr,
+            )
+            print(
+                "Usage: python script.py <department_json> <shot_json> <final_path> <version_path>",
+                file=sys.stderr,
+            )
             sys.exit(1)
         department_data = json.loads(sys.argv[1])
         shot_data = json.loads(sys.argv[2])
