@@ -18,7 +18,7 @@ def get_config_dir(app_name="myapp") -> str:
 
 class Settings:
     APP_NAME = "ZerØXe"
-    BUILD_VERSION = "v0.0.16"
+    BUILD_VERSION = "v0.0.17"
 
     VERSIONING_FOLDER="progress"
     VERSIONING_LOG_FOLDER=".zeroxe"
