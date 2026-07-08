@@ -895,26 +895,35 @@ class HandleBLauncherPreview(QWidget):
                 return ""
             shot_assets = AssetServices.get_assets_for_shot(shot_id=shot_data[0].get("id", ""))
             shot_data[0]["assets"] = shot_assets
-            args = [
-                "python",
-                str(self.zeroxe_core),
-                json.dumps(self.zeroxe_conf),
-                json.dumps(shot_data[0]),
-                str(self.builderGroup.checkedId()),
-                str(file_path),
-                str(init_version_path),
-            ]
-            process = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            stdout, stderr = process.communicate()
+            for python_cmd in ("python", "python3"):
+                args = [
+                    python_cmd,
+                    str(self.zeroxe_core),
+                    json.dumps(self.zeroxe_conf),
+                    json.dumps(shot_data[0]),
+                    str(self.builderGroup.checkedId()),
+                    str(file_path),
+                    str(init_version_path),
+                ]
 
-            generated_script = None
-            if process.returncode == 0:
-                generated_script = stdout
-                print("Successfully generated script!")
-            else:
-                print(f"Failed: {stderr}")
+                try:
+                    process = subprocess.Popen(
+                        args,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    stdout, stderr = process.communicate()
+
+                    if process.returncode == 0:
+                        generated_script = stdout
+                        print(f"Successfully generated script using {python_cmd}!")
+                        break
+                    else:
+                        print(f"{python_cmd} failed: {stderr}")
+
+                except FileNotFoundError:
+                    print(f"{python_cmd} executable not found.")
 
             if not generated_script:
                 reply = QMessageBox.warning(
