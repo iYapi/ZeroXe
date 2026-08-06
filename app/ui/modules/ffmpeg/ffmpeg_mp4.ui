@@ -190,7 +190,7 @@
      <item row="1" column="0" colspan="2">
       <layout class="QGridLayout" name="gridLayout_available">
        <item row="1" column="0">
-        <widget class="QListView" name="listView_available"/>
+        <widget class="QTableView" name="tableView_available"/>
        </item>
        <item row="0" column="0">
         <widget class="QLineEdit" name="lineEdit_availableSearch">
