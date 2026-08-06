@@ -59,8 +59,8 @@ class MainUI(QMainWindow):
         # self.ui.tabWidget.addTab(HandleBLauncher(), "BLauncher")
         self.ui.tabWidget.addTab(HandleBLauncherPreview(), "BLauncher(preview)")
         self.ui.tabWidget.addTab(HandleFFMPEGMP4(), "ffmpegMP4")
-        self.ui.tabWidget.addTab(HandleSetupDepartment(), "Setup(preview)")
         self.ui.tabWidget.addTab(HandleClPlayblast(), "ClPlayblast")
+        self.ui.tabWidget.addTab(HandleSetupDepartment(), "Setup(preview)")
         self.ui.radioButton_printLog.toggled.connect(
             lambda checked: self.print_log(checked)
         )
