@@ -124,6 +124,7 @@ class LightingBuilder:
 
         # Get lit mastershot path
         # lit_mastershot_name = shot_data.get("data", {}).get("ms_lit", "")
+        relative_assets = {}
         asset_types = asset_department.get("Asset", {}).get("asset_type", {})
         shot_assets_content = shot_data.get("assets", [])
         asset_type_map = {config["id"]: (category_key, config) for category_key, config in asset_types.items()}
@@ -131,7 +132,16 @@ class LightingBuilder:
             asset_type_id = asset["entity_type_id"]
             if asset_type_id in asset_type_map:
                 category_key, config = asset_type_map[asset_type_id]
-                if category_key.lower().startswith("ms_"):
+                if category_key.lower() == "set":
+                    if category_key not in relative_assets:
+                        relative_assets[category_key] = {
+                            "assets": [],
+                            "base_path": config.get("base_path"),
+                            "prefix": config.get("prefix"),
+                            "code": config.get("code"),
+                        }
+                    relative_assets[category_key]["assets"].append(asset["name"])
+                elif category_key.lower().startswith("ms_"):
                     if category_key.lower() == "ms_lit":
                         lit_mastershot_name = asset.get("name", "")
                         lit_mastershot_base_path = config.get("base_path", "")
@@ -143,6 +153,21 @@ class LightingBuilder:
             / lit_mastershot_name
             / f"{lit_mastershot_name}.blend"
         )
+
+        # Construct collection dict
+        collections_dict = {}
+        for category, data in relative_assets.items():
+            paths = []
+            base_dir = Path(data["base_path"])
+
+            for asset in data["assets"]:
+                filename = f"{asset}.blend"
+                full_path = base_dir / asset / filename
+
+                # Convert back to string for Blender's libraries.load
+                paths.append(str(full_path))
+
+            collections_dict[data["code"]] = paths
 
         # Get preset
         dept_data = next(iter(current_department.values()))
@@ -162,9 +187,12 @@ class LightingBuilder:
         collection_list = [
             (config.get("code"), config.get("prefix"))
             for config in asset_types.values()
+            if config.get("code") not in ["ms", "set"] and not config.get("code", "").startswith("ms")
         ]
         # Add the camera entry manually
         collection_list.append(("cam", None))
+        # Add the hidden entry manually (always linked whole, regardless of link_whole toggle)
+        collection_list.append(("hdn", None))
 
         # Construct shot metadata
         frame_in = int(shot_data.get("data", {}).get("frame_in", "0"))
@@ -190,6 +218,7 @@ class LightingBuilder:
             animation_file=filepath["source"],
             setting_data=setting_data,
             collection_list=collection_list,
+            set_collection=collections_dict
         )
         return lighting_script
 
@@ -201,12 +230,15 @@ class LightingBuilder:
         animation_file: str,
         setting_data: dict,
         collection_list: list,
+        set_collection: list,
     ):
         tpl = Template(
             dedent(
                 """
 import bpy
 from pathlib import Path
+
+collections = $SET_COLLECTION
 							  
 bpy.ops.wm.open_mainfile(filepath="$FILEPATH")
 
@@ -266,16 +298,19 @@ def link_animation():
 		parents[name] = ensure_parent_in_scene(name)
 
 	desired = {}
+	link_whole = bool($LINK_WHOLE)
 
 	with bpy.data.libraries.load("$ANIMATION_FILE", link=True) as (data_from, data_to):
 		for parent_name, prefix in $COLLECTION_LIST:
-			if prefix is None:
-				cam_coll = next((c for c in data_from.collections if c.lower() == "$CAMERA_COLLECTION".lower()), None)
-				if cam_coll:
-					desired[parent_name] = [cam_coll]
+			if prefix is None or link_whole:
+				# Match the collection by its own exact name (e.g. "cam", "hdn",
+				# or, when link_whole is True, "chr" / "vhc" / etc. as a whole).
+				exact_coll = next((c for c in data_from.collections if c.lower() == parent_name.lower()), None)
+				if exact_coll:
+					desired[parent_name] = [exact_coll]
 				else:
 					desired[parent_name] = []
-					print("[WARNING] '$CAMERA_COLLECTION' not found in library")
+					print(f"[WARNING] '{parent_name}' not found in library")
 			else:
 				names = [n for n in data_from.collections if n.startswith(prefix)]
 				desired[parent_name] = names
@@ -368,6 +403,72 @@ def link_animation():
 		print(f"[CAM] {'Linked' if link_mode else 'Appended'} '{cam_name}' as "
 			  f"{'library' if link_mode else 'local'} collection '{found.name}'")
 
+def select_only(obj):
+	for o in bpy.context.view_layer.objects:
+		o.select_set(False)
+	obj.select_set(True)
+	bpy.context.view_layer.objects.active = obj
+
+def link_set_collection(collections_dict):
+	for category_name, file_paths in collections_dict.items():
+		# Create or get top-level category collection
+		if category_name in bpy.data.collections:
+			category_collection = bpy.data.collections[category_name]
+		else:
+			category_collection = bpy.data.collections.new(category_name)
+			bpy.context.scene.collection.children.link(category_collection)
+
+		# Link collections from each .blend file
+		for asset_path_str in file_paths:
+			asset_path = Path(asset_path_str)
+
+			# Collection name = stem of file (filename without extension)
+			collection_name = asset_path.stem  # e.g., "c-bahlil"
+
+			# Load collection from the blend file
+			with bpy.data.libraries.load(str(asset_path), link=True) as (data_from, data_to):
+				if collection_name in data_from.collections:
+					data_to.collections = [collection_name]  # Only load this collection
+				else:
+					print(f"Collection '{collection_name}' not found in {asset_path}")
+					continue
+     
+			# Link the loaded collection into the category collection
+			for linked_collection in data_to.collections:
+				if linked_collection and linked_collection.name not in category_collection.children:
+					category_collection.children.link(linked_collection)
+					armatures = [obj for obj in linked_collection.all_objects if obj.type == 'ARMATURE']
+
+					if not armatures:
+						print(f"[SKIP] '{linked_collection.name}' tidak punya Armature.")
+						continue
+
+					# Override the entire collection
+					for arm in armatures:
+						select_only(arm)  # Ensure the object is active and selected
+						bpy.context.view_layer.update()  # Update the context
+
+						try:
+							bpy.ops.object.make_override_library(collection=linked_collection.session_uid)
+						except Exception:
+							bpy.ops.object.make_override_library()
+
+					# Ensure the overridden collection remains in the category collection and remove it from the root
+					if linked_collection.name in bpy.data.collections:
+						overridden_collection = bpy.data.collections[linked_collection.name]
+						if overridden_collection.name not in [child.name for child in category_collection.children]:
+							category_collection.children.link(overridden_collection)
+							print(f"Kept overridden collection '{overridden_collection.name}' in category '{category_collection.name}'")
+
+						# Remove the overridden collection from the root collection
+						if overridden_collection.name in [child.name for child in bpy.context.scene.collection.children]:
+							bpy.context.scene.collection.children.unlink(overridden_collection)
+							print(f"Removed overridden collection '{overridden_collection.name}' from root collection")
+
+					bpy.context.view_layer.update()
+				print(f"Linked collection '{linked_collection.name}' into '{category_name}'")
+
+link_set_collection(collections)
 
 def update_camera():
 	# Update camera settings
@@ -429,8 +530,10 @@ bpy.ops.wm.quit_blender()
             FILEPATH=master_file,
             ANIMATION_FILE=animation_file,
             COLLECTION_LIST=collection_list,
+            SET_COLLECTION=set_collection,
             CAMERA_COLLECTION="cam",
             METHOD=False,
+            LINK_WHOLE=False,
             OUTPUT_PATH=filepath,
             SETTINGS=setting_data,
         )
