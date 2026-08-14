@@ -226,6 +226,8 @@ def link_collection(collections_dict):
 
 			# Collection name = stem of file (filename without extension)
 			collection_name = asset_path.stem  # e.g., "c-bahlil"
+			if category_name == "set":
+				collection_name = f"{collection_name}_lo"
 
 			# Load collection from the blend file
 			with bpy.data.libraries.load(str(asset_path), link=True) as (data_from, data_to):

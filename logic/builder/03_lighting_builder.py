@@ -191,7 +191,6 @@ class LightingBuilder:
         ]
         # Add the camera entry manually
         collection_list.append(("cam", None))
-        # Add the hidden entry manually (always linked whole, regardless of link_whole toggle)
         collection_list.append(("hdn", None))
 
         # Construct shot metadata
@@ -289,6 +288,7 @@ def get_empty_groups_from_collection(collection_name: str):
 # Main Fucntion
 def link_animation():
 	# Link the animation file
+	link_whole = $LINK_WHOLE
 	print("Animation file:", "$ANIMATION_FILE")
 	parents = {}
 	for name, prefix in $COLLECTION_LIST:
@@ -298,19 +298,15 @@ def link_animation():
 		parents[name] = ensure_parent_in_scene(name)
 
 	desired = {}
-	link_whole = bool($LINK_WHOLE)
-
 	with bpy.data.libraries.load("$ANIMATION_FILE", link=True) as (data_from, data_to):
 		for parent_name, prefix in $COLLECTION_LIST:
-			if prefix is None or link_whole:
-				# Match the collection by its own exact name (e.g. "cam", "hdn",
-				# or, when link_whole is True, "chr" / "vhc" / etc. as a whole).
-				exact_coll = next((c for c in data_from.collections if c.lower() == parent_name.lower()), None)
-				if exact_coll:
-					desired[parent_name] = [exact_coll]
+			if prefix is None:
+				cam_coll = next((c for c in data_from.collections if c.lower() == "$CAMERA_COLLECTION".lower()), None)
+				if cam_coll:
+					desired[parent_name] = [cam_coll]
 				else:
 					desired[parent_name] = []
-					print(f"[WARNING] '{parent_name}' not found in library")
+				print("[WARNING] '$CAMERA_COLLECTION' not found in library")
 			else:
 				names = [n for n in data_from.collections if n.startswith(prefix)]
 				desired[parent_name] = names
@@ -319,18 +315,51 @@ def link_animation():
 	for parent_name, names in desired.items():
 		if parent_name.lower() == "$CAMERA_COLLECTION".lower():
 			continue
-		to_link.extend(names)
+		if link_whole:
+			if desired[parent_name]:
+				_force_remove_collection(parent_name)
+				to_link.append(parent_name)
+		else:
+			to_link.extend(names)
 
 	to_link = [n for n in to_link if n not in bpy.data.collections]
 
 	if to_link:
 		with bpy.data.libraries.load("$ANIMATION_FILE", link=True) as (data_from, data_to):
 			data_to.collections = [n for n in to_link if n in data_from.collections]
+			print(f"linked: {data_to.collections}")
+
+	root_col = bpy.context.scene.collection
 
 	for parent_name, child_names in desired.items():
 		if parent_name.lower() == "$CAMERA_COLLECTION".lower():
 			continue
-		parent = parents[parent_name]
+
+		if link_whole:
+			col = bpy.data.collections.get(parent_name)
+			if not col:
+				print(f"[WARNING] Expected linked collection missing: {parent_name}")
+				continue # Added missing continue to prevent AttributeError below
+
+			if not (col.library and bpy.path.abspath(col.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")):
+				col = next((c for c in bpy.data.collections
+							if c.name == parent_name and c.library and
+							bpy.path.abspath(c.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")), None)
+				if not col:
+					print(f"[WARNING] (Parent) No valid linked collection found for: {parent_name}")
+					continue
+
+			if col.name not in root_col.children:
+				root_col.children.link(col)
+				print(f"Linked '{parent_name}' under '{root_col.name}'")
+
+			continue
+
+		parent = parents.get(parent_name)
+		if not parent:
+			print(f"[WARNING] Local parent collection not found: {parent_name}")
+			continue
+
 		for cname in child_names:
 			col = bpy.data.collections.get(cname)
 			if not col:
@@ -345,11 +374,9 @@ def link_animation():
 					print(f"[WARNING] No valid linked collection found for: {cname}")
 					continue
 
-			if cname not in parent.children.keys():
+			if col.name not in parent.children:
 				parent.children.link(col)
 				print(f"Linked '{cname}' under '{parent_name}'")
-			else:
-				pass
 
 	link_mode = bool($METHOD)
 	cam_names = next((v for k, v in desired.items() if k.lower() == "$CAMERA_COLLECTION".lower()), [])
@@ -424,7 +451,8 @@ def link_set_collection(collections_dict):
 
 			# Collection name = stem of file (filename without extension)
 			collection_name = asset_path.stem  # e.g., "c-bahlil"
-
+			if category_name == "set":
+				collection_name = f"{collection_name}_hi"
 			# Load collection from the blend file
 			with bpy.data.libraries.load(str(asset_path), link=True) as (data_from, data_to):
 				if collection_name in data_from.collections:
@@ -533,7 +561,7 @@ bpy.ops.wm.quit_blender()
             SET_COLLECTION=set_collection,
             CAMERA_COLLECTION="cam",
             METHOD=False,
-            LINK_WHOLE=False,
+            LINK_WHOLE=True,
             OUTPUT_PATH=filepath,
             SETTINGS=setting_data,
         )
