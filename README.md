@@ -2,7 +2,7 @@
 
 **Desktop application** berbasis PyQt6 sebagai Blender Asset/Shot Launcher dan Version Manager terintegrasi dengan **Kitsu** project management.
 
-- **Versi:** v0.0.10
+- **Versi:** v0.0.18
 - **Python:** 3.10+
 - **Author:** MrYapikZ
 
