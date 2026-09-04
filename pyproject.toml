@@ -7,7 +7,12 @@ authors = [
     { name = "iYapi", email = "yafialhaidar18@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "gazu>=1.2.2",
+    "packaging>=26.3",
+    "pyside6>=6.11.2",
+    "requests>=2.34.2",
+]
 
 [project.scripts]
 zeroxe = "zeroxe:main"
@@ -15,3 +20,11 @@ zeroxe = "zeroxe:main"
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.22.2",
+    "pytest>=9.1.1",
+    "pytest-qt>=4.5.0",
+    "ruff>=0.16.6",
+]
