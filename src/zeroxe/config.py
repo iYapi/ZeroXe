@@ -11,7 +11,7 @@ MAINTAINER = "iYapi"
 MAINTAINER_WEB = "https://yapi.expiproject.com"
 
 # Update Server Configuration
-UPDATE_MANIFEST_URL = "https://github.com/iYapi/ZeroXe/blob/main/version.json"
+UPDATE_MANIFEST_URL = "https://github.com/iYapi/ZeroXe/blob/remake/version.json"
 
 # Dynamic Path Resolution
 def get_base_dir() -> Path:

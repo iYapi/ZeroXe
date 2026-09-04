@@ -5,20 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/zeroxe.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/api/update_api.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/services/update_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/views/main_view.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/main_view.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/uv.lock" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/version.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/zeroxe/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -81,7 +68,7 @@
       <option name="presentableId" value="Default" />
       <updated>1788494478448</updated>
       <workItem from="1788494479530" duration="2118000" />
-      <workItem from="1788496669747" duration="5617000" />
+      <workItem from="1788496669747" duration="5844000" />
     </task>
     <servers />
   </component>
