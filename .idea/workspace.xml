@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/config.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/build_executable.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,6 +35,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.build_executable.executor": "Run",
     "Python.main.executor": "Run",
     "Python.main_view.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
@@ -68,7 +70,7 @@
       <option name="presentableId" value="Default" />
       <updated>1788494478448</updated>
       <workItem from="1788494479530" duration="2118000" />
-      <workItem from="1788496669747" duration="5844000" />
+      <workItem from="1788496669747" duration="6527000" />
     </task>
     <servers />
   </component>
@@ -78,5 +80,6 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1788508944136" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
     <SUITE FILE_PATH="coverage/ZeroXe$main_view.coverage" NAME="main_view Coverage Results" MODIFIED="1788508837608" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe/views" />
+    <SUITE FILE_PATH="coverage/ZeroXe$build_executable.coverage" NAME="build_executable Coverage Results" MODIFIED="1788510426871" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scripts" />
   </component>
 </project>
