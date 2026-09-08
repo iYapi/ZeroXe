@@ -368,11 +368,11 @@ class HandleBLauncherPreview(QWidget):
             self.ui.listWidget_list.setCurrentItem(item)
             if self.ui.comboBox_entity.currentIndex() == 1:
                 asset_id = item.data(Qt.ItemDataRole.UserRole)
-                self.load_metadata(asset_id, use_master=True)
+                self.load_metadata(asset_id, use_master=False)
             elif self.ui.comboBox_entity.currentIndex() == 2:
                 shot_data = item.data(Qt.ItemDataRole.UserRole)
-                self.load_metadata(shot_data["shot_id"], use_master=True)
-            self.reload_version_metadata(use_master=True)
+                self.load_metadata(shot_data["shot_id"], use_master=False)
+            self.reload_version_metadata(use_master=False)
             print(self.selected_path)
 
             if self.batch_mode:
