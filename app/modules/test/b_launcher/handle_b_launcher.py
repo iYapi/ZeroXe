@@ -309,25 +309,24 @@ class HandleBLauncherPreview(QWidget):
             )
         self.reload_version_metadata()
 
-    def on_up_master(self):
+    def _up_master_current(self):
         blender_program = self.ui.lineEdit_blenderPath.text().strip()
         if self.selected_item is None or not blender_program:
-            return
-
-        if self.ui.listWidget_version.currentItem() is None:
-            return
-
-        master_path, _ = self.shot_or_asset_path()
+            return False
 
         version_selected = self.ui.listWidget_version.currentItem()
         if version_selected is None:
             QMessageBox.warning(
                 self, "Warning", "Please select a version to up master."
             )
-            return
+            return False
+
         if not self.zeroxe_conf:
             QMessageBox.warning(self, "Warning", "Zeroxe conf not found.")
-            return
+            return False
+
+        master_path, _ = self.shot_or_asset_path()
+
         preset = (
             self.zeroxe_conf.get("departments", {})
             .get(self.ui.comboBox_department.currentText(), {})
@@ -354,7 +353,39 @@ class HandleBLauncherPreview(QWidget):
         )
         self.reload_version_metadata()
         self.load_version(show_master=self.ui.radioButton_showMaster.isChecked())
-        QMessageBox.information(self, "Info", "Successfully up master.")
+        return True
+
+
+    def on_up_master(self):
+        if not self.ui.listWidget_list.selectedItems():
+            QMessageBox.warning(self, "Warning", "No shot or asset selected.")
+            return
+
+        selected_items = self.ui.listWidget_list.selectedItems()
+
+        any_success = False
+        for item in selected_items:
+            self.ui.listWidget_list.setCurrentItem(item)
+            if self.ui.comboBox_entity.currentIndex() == 1:
+                asset_id = item.data(Qt.ItemDataRole.UserRole)
+                self.load_metadata(asset_id, use_master=True)
+            elif self.ui.comboBox_entity.currentIndex() == 2:
+                shot_data = item.data(Qt.ItemDataRole.UserRole)
+                self.load_metadata(shot_data["shot_id"], use_master=True)
+            self.reload_version_metadata(use_master=True)
+            print(self.selected_path)
+
+            if self.batch_mode:
+                # Run the up-master action for every selected item
+                if self._up_master_current():
+                    any_success = True
+
+        if not self.batch_mode:
+            # Original behavior: only act on the last item processed above
+            any_success = self._up_master_current()
+
+        if any_success:
+            QMessageBox.information(self, "Info", "Successfully up master.")
 
     def on_up_version(self):
         blender_program = self.ui.lineEdit_blenderPath.text().strip()
