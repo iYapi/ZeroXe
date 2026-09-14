@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>854</width>
+    <height>862</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0">
+    <layout class="QGridLayout" name="gridLayout_main">
+     <item row="0" column="1">
+      <widget class="QWidget" name="verticalWidget_search" native="true">
+       <property name="styleSheet">
+        <string notr="true">/* The main box */
+QComboBox {
+    border: 1px solid #3d3d3d;
+    border-radius: 5px; /* macOS uses approx 5-6px */
+    padding: 4px 10px 4px 10px;
+    font-size: 13px;
+}
+
+/* The container for the arrow */
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: none;
+}
+
+/* The macOS Chevron (Simplified) */
+QComboBox::down-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #BBBBBB;
+    margin-right: 8px;
+}
+</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_search">
+        <item>
+         <widget class="QLabel" name="label">
+          <property name="font">
+           <font>
+            <pointsize>16</pointsize>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>Select First</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_department">
+          <item>
+           <widget class="QLabel" name="label_department">
+            <property name="text">
+             <string>Department</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBox_department">
+            <property name="placeholderText">
+             <string>-- Select Department --</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_project">
+          <item>
+           <widget class="QLabel" name="label_project">
+            <property name="text">
+             <string>Project</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBox_project">
+            <property name="placeholderText">
+             <string>-- Select Project --</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_entity">
+          <item>
+           <widget class="QLabel" name="label_entity">
+            <property name="text">
+             <string>Entity</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBox_entity">
+            <property name="placeholderText">
+             <string>-- Select Entity --</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_episode">
+          <item>
+           <widget class="QLabel" name="label_episode">
+            <property name="text">
+             <string>Episode</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBox_episode">
+            <property name="placeholderText">
+             <string>-- Select Episode --</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_type">
+          <item>
+           <widget class="QLabel" name="label_type">
+            <property name="text">
+             <string>Type</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBox_type">
+            <property name="placeholderText">
+             <string>-- Select Type --</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_2">
+          <property name="orientation">
+           <enum>Qt::Orientation::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="1" column="2">
+      <widget class="QWidget" name="verticalWidget_target" native="true">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">.QListWidget {
+border-radius: 5%;
+border: 1px solid black;
+}
+</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_version">
+        <item>
+         <widget class="QLabel" name="label_source">
+          <property name="text">
+           <string>Source</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_sourceName">
+          <property name="text">
+           <string>...</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="Line" name="line_2">
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_3">
+          <property name="orientation">
+           <enum>Qt::Orientation::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <layout class="QGridLayout" name="gridLayout_function">
+       <item row="2" column="0" colspan="2">
+        <layout class="QGridLayout" name="gridLayout_builderType"/>
+       </item>
+       <item row="1" column="0" colspan="2">
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item row="6" column="0" colspan="2">
+        <widget class="QPushButton" name="pushButton_target">
+         <property name="styleSheet">
+          <string notr="true">.QPushButton {
+    border: none;
+    background-color: black;
+    border-radius: 5%;
+    color: white;
+    padding: 4px;
+}
+
+.QPushButton:hover {
+    background-color: #333333;
+    color: white;
+    border: none;
+}
+
+.QPushButton:pressed {
+    background-color: #666666;
+    color: #e0e0e0;
+    padding: 5px 4px 3px 4px;
+}</string>
+         </property>
+         <property name="text">
+          <string>Generate</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0" colspan="2">
+        <widget class="QWidget" name="gridWidget_blenderPath" native="true">
+         <property name="styleSheet">
+          <string notr="true">#gridWidget_blenderPath .QWidget {
+background-color: White;
+border: 2px solid black;
+border-radius: 5%;
+}
+
+#gridWidget_blenderPath .QLineEdit {
+border: 1px solid black;
+border-radius: 5%;
+}
+
+#gridWidget_blenderPath .QToolButton {
+border: none;
+background-color:  black;
+color: white;
+border-radius: 5%;
+padding: 2px;
+}</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_blenderPath">
+          <item row="1" column="0">
+           <widget class="QLineEdit" name="lineEdit_blenderPath">
+            <property name="styleSheet">
+             <string notr="true"/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QToolButton" name="toolButton_blenderPath">
+            <property name="text">
+             <string>Locate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0" colspan="2">
+           <widget class="QLabel" name="label_blenderPath">
+            <property name="text">
+             <string>Blender</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="3" column="0" colspan="2">
+        <widget class="Line" name="line">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="2">
+        <widget class="QPushButton" name="pushButton_source">
+         <property name="text">
+          <string>Source</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="0" column="2">
+      <widget class="QWidget" name="gridWidget_metadata" native="true">
+       <property name="styleSheet">
+        <string notr="true">.QTableView {
+border-radius: 5%;
+border: 1px solid black;
+}</string>
+       </property>
+       <layout class="QGridLayout" name="gridLayout_metadata">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_metadata">
+          <property name="text">
+           <string>Metadata</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QTableView" name="tableView_metadata"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="0" column="0" rowspan="2">
+      <widget class="QWidget" name="verticalWidget_list" native="true">
+       <property name="styleSheet">
+        <string notr="true">.QListWidget {
+border-radius: 5%;
+border: 1px solid black;
+}
+
+.QLineEdit {
+border-radius: 5%;
+border: 1px solid black;
+}
+</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_list">
+        <item>
+         <widget class="QLineEdit" name="lineEdit_list">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="toolTip">
+           <string>Search Shot/Asset</string>
+          </property>
+          <property name="statusTip">
+           <string/>
+          </property>
+          <property name="placeholderText">
+           <string>Search Shot</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="listWidget_list"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

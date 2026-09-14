@@ -17,6 +17,7 @@ from app.modules.test.setup.setup_department import HandleSetupDepartment
 from app.modules.test.b_launcher.handle_b_launcher import HandleBLauncherPreview
 from app.modules.ffmpeg.handle_ffmpeg_mp4 import HandleFFMPEGMP4
 from app.modules.collector.cl_playblast.handle_cl_playblast import HandleClPlayblast
+from app.modules.special_case.comp_saveas.handle_comp_saveas import HandleCompSaveAs
 
 class MainUI(QMainWindow):
     def __init__(self):
@@ -60,6 +61,7 @@ class MainUI(QMainWindow):
         self.ui.tabWidget.addTab(HandleBLauncherPreview(), "BLauncher(preview)")
         self.ui.tabWidget.addTab(HandleFFMPEGMP4(), "ffmpegMP4")
         self.ui.tabWidget.addTab(HandleClPlayblast(), "ClPlayblast")
+        self.ui.tabWidget.addTab(HandleCompSaveAs(), 'SC_CompSAs')
         self.ui.tabWidget.addTab(HandleSetupDepartment(), "Setup(preview)")
         self.ui.radioButton_printLog.toggled.connect(
             lambda checked: self.print_log(checked)
