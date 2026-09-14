@@ -370,7 +370,7 @@ class HandleCompSaveAs(QWidget):
         self.ui.tableView_metadata.setWordWrap(True)
 
     # Table view task and metadata trigger
-    def load_metadata(self, asset_or_shot_id, use_master: bool = False):
+    def load_metadata(self, asset_or_shot_id, use_master: bool = True):
         if asset_or_shot_id is None:
             return
 
