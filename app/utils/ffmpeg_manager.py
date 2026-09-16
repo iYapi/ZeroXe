@@ -1,6 +1,28 @@
-from ffmpeg.asyncio import FFmpeg
+import functools
+import os
+import re
+import subprocess
 from pathlib import Path
-from typing import List
+from typing import Dict, List
+
+from ffmpeg.asyncio import FFmpeg
+
+
+@functools.lru_cache(maxsize=1)
+def _get_fps_mode_option() -> Dict[str, str]:
+    """
+    FFmpeg 5.1+ deprecated '-vsync' in favor of '-fps_mode'.
+    FFmpeg 7.0+ completely removed '-vsync', causing 'Option not found' errors.
+    Returns the appropriate option for the installed FFmpeg version.
+    """
+    try:
+        res = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+        match = re.search(r"ffmpeg version (?:n)?(\d+)", res.stdout)
+        if match and int(match.group(1)) < 5:
+            return {"vsync": "vfr"}
+    except Exception:
+        pass
+    return {"fps_mode": "vfr"}
 
 
 class FFMPEGManager:
@@ -74,6 +96,15 @@ class FFMPEGManager:
                 
                 print(f"  Created concat file with {len(image_files)} entries")
                 
+                output_options = {
+                    "vcodec": "mpeg4",
+                    "qscale:v": str(quality),
+                    "acodec": "aac",
+                    "b:a": "192k",
+                    "pix_fmt": "yuv420p",
+                }
+                output_options.update(_get_fps_mode_option())
+
                 # Build FFmpeg command using concat demuxer
                 # -f concat: use concat demuxer
                 # -safe 0: allow any file paths
@@ -85,21 +116,10 @@ class FFMPEGManager:
                     .option("safe", "0")
                     .option("r", str(framerate))  # input framerate
                     .input(str(concat_file))
-                    .output(
-                        output_file,
-                        **{
-                            "vcodec": "mpeg4",
-                            "qscale:v": str(quality),
-                            "acodec": "aac",
-                            "b:a": "192k",
-                            "pix_fmt": "yuv420p",
-                            "vsync": "vfr"
-                        }
-                    )
+                    .output(output_file, **output_options)
                 )
                 
                 # Change to folder directory for relative paths
-                import os
                 original_dir = os.getcwd()
                 os.chdir(folder)
                 
@@ -132,7 +152,7 @@ class FFMPEGManager:
     ) -> bool:
         """
         Convert any video format to MP4 with:
-        - H.264 video
+        - MPEG-4 video
         - AAC audio
         """
 
@@ -141,21 +161,20 @@ class FFMPEGManager:
             print(f"  Input : {input_file}")
             print(f"  Output: {output_file}")
 
+            output_options = {
+                "vcodec": "mpeg4",
+                "qscale:v": str(quality),
+                "acodec": "aac",
+                "b:a": "192k",
+                "pix_fmt": "yuv420p",
+            }
+            output_options.update(_get_fps_mode_option())
+
             ffmpeg = (
                 FFmpeg()
                 .option("y")
                 .input(input_file)
-                .output(
-                    output_file,
-                        **{
-                            "vcodec": "mpeg4",
-                            "qscale:v": str(quality),
-                            "acodec": "aac",
-                            "b:a": "192k",
-                            "pix_fmt": "yuv420p",
-                            "vsync": "vfr"
-                        }
-                )
+                .output(output_file, **output_options)
             )
 
             await ffmpeg.execute()
