@@ -103,7 +103,7 @@ class FFMPEGManager:
                     "b:a": "192k",
                     "pix_fmt": "yuv420p",
                 }
-                output_options.update(_get_fps_mode_option())
+                output_options.update({"vsync": "vfr"})
 
                 # Build FFmpeg command using concat demuxer
                 # -f concat: use concat demuxer
