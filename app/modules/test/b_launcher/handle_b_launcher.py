@@ -690,6 +690,7 @@ class HandleBLauncherPreview(QWidget):
             self.selected_path = str(full_path)
         version_folder = VersioningSystem.get_version_folder(master_path)
         version_info_list = VersioningSystem.get_version_info_list(str(version_folder))
+        print(version_folder)
         for version_info in version_info_list:
             item = QListWidgetItem(version_info["version"])
             item.setData(Qt.ItemDataRole.UserRole, version_info["full_path"])
@@ -915,7 +916,11 @@ class HandleBLauncherPreview(QWidget):
         init_version_path.parent.mkdir(parents=True, exist_ok=True)
 
         create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
-        if self.ui.comboBox_entity.currentIndex() == 2:
+        if self.ui.comboBox_entity.currentIndex() == 1:
+            # Asset launcher
+            create_script = f"import bpy, os; bpy.ops.wm.read_factory_settings(use_empty=True); b = os.path.splitext(os.path.basename('{file_path}'))[0]; is_s = b.startswith('s-'); sub_b = b if is_s else (b[2:] if len(b) > 2 and b[1] == '-' else b); sfxs = ['_hi', '_lo'] if is_s else ['_mdl', '_rig']; r = bpy.data.collections.new(b); bpy.context.scene.collection.children.link(r); [r.children.link(bpy.data.collections.new(f'{{sub_b}}{{s}}')) for s in sfxs]; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+
+        elif self.ui.comboBox_entity.currentIndex() == 2:
             # Zeroxe launcher
             selected_item = self.ui.listWidget_list.currentItem()
             if selected_item is None:
