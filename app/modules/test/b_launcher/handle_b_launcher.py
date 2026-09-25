@@ -918,7 +918,7 @@ class HandleBLauncherPreview(QWidget):
         create_script = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
         if self.ui.comboBox_entity.currentIndex() == 1:
             # Asset launcher
-            create_script = f"import bpy, os; bpy.ops.wm.read_factory_settings(use_empty=True); b = os.path.splitext(os.path.basename('{file_path}'))[0]; is_s = b.startswith('s-'); sub_b = b if is_s else (b[2:] if len(b) > 2 and b[1] == '-' else b); sfxs = ['_hi', '_lo'] if is_s else ['_mdl', '_rig']; r = bpy.data.collections.new(b); bpy.context.scene.collection.children.link(r); [r.children.link(bpy.data.collections.new(f'{{sub_b}}{{s}}')) for s in sfxs]; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
+            create_script = f"import bpy, os; bpy.ops.wm.read_factory_settings(use_empty=True); b = os.path.splitext(os.path.basename('{file_path}'))[0]; is_s = b.startswith('s-'); sub_b = b if is_s else (b[2:] if len(b) > 2 and b[1] == '-' else b); sfxs = ['_hi', '_lo'] if is_s else ['_grp_mdl', '_grp_rig']; r = bpy.data.collections.new(b); bpy.context.scene.collection.children.link(r); [r.children.link(bpy.data.collections.new(f'{{sub_b}}{{s}}')) for s in sfxs]; bpy.ops.wm.save_as_mainfile(filepath='{file_path}'); bpy.ops.wm.save_as_mainfile(filepath='{init_version_path}')"
 
         elif self.ui.comboBox_entity.currentIndex() == 2:
             # Zeroxe launcher
