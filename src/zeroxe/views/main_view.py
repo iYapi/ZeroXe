@@ -2,10 +2,23 @@ import os
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QSpacerItem, QSizePolicy, QDialog, QVBoxLayout, QLabel, \
-    QDialogButtonBox, QWidget, QProgressBar, QPushButton
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QSpacerItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 from zeroxe import config
 from zeroxe.api.update_api import UpdateAPI
+from zeroxe.views.launcher_view import LauncherView
 
 class UpdateWorker(QThread):
     status_updated = Signal(str)
@@ -51,6 +64,13 @@ class MainView(QMainWindow):
         self.latest_update_info = None
 
         self._create_menu_bar()
+        self._setup_ui()
+
+    def _setup_ui(self):
+        self.tab_widget = QTabWidget(self)
+        self.launcher_view = LauncherView(self)
+        self.tab_widget.addTab(self.launcher_view, "Launcher")
+        self.setCentralWidget(self.tab_widget)
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
