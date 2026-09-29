@@ -5,8 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/scripts/build_executable.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/zeroxe.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/zeroxe.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/build_appimage.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/build_executable.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,24 +35,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.build_executable.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.main_view.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "remake",
-    "last_opened_file_path": "/home/iyapi/Documents/Project/2026/remake/ZeroXe",
-    "node.js.detected.package.jshint": "true",
-    "node.js.selected.package.jshint": "",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.pluginManager"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.build_executable.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main_view.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;remake&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/iyapi/Documents/Project/2026/Jetto-Desktop&quot;,
+    &quot;node.js.detected.package.jshint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.jshint&quot;: &quot;&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$" />
@@ -70,7 +73,11 @@
       <option name="presentableId" value="Default" />
       <updated>1788494478448</updated>
       <workItem from="1788494479530" duration="2118000" />
-      <workItem from="1788496669747" duration="6527000" />
+      <workItem from="1788496669747" duration="6829000" />
+      <workItem from="1788755456346" duration="585000" />
+      <workItem from="1788756054639" duration="1978000" />
+      <workItem from="1789357058957" duration="7000" />
+      <workItem from="1790650623202" duration="1514000" />
     </task>
     <servers />
   </component>
