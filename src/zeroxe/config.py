@@ -44,3 +44,4 @@ SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 ACTIVE_SCRIPT_PATH = SCRIPTS_DIR / "active_task.py"
 
 ASSETS_DIR = BASE_DIR / "assets"
+KITSU_API_URL = ""
