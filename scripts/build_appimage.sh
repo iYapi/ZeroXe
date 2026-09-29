@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Add user bin paths if not in PATH
+export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+
 # --- Configuration & Paths ---
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="zeroxe"
@@ -12,10 +15,19 @@ ICON_SOURCE="${PROJECT_ROOT}/assets/icons/zeroxe.png"
 
 echo "==> Building AppImage for ${APP_DISPLAY_NAME}..."
 
-# 1. Build PyInstaller in onedir mode via uv
+# Determine python runner (uv or .venv)
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_RUNNER="uv run python"
+elif [ -f "${PROJECT_ROOT}/.venv/bin/python" ]; then
+    PYTHON_RUNNER="${PROJECT_ROOT}/.venv/bin/python"
+else
+    PYTHON_RUNNER="python3"
+fi
+
+# 1. Build PyInstaller in onedir mode
 echo "==> Compiling application via scripts/build_executable.py..."
 cd "${PROJECT_ROOT}"
-uv run python scripts/build_executable.py --onedir
+${PYTHON_RUNNER} scripts/build_executable.py --onedir
 
 # 2. Prepare clean AppDir layout
 echo "==> Setting up AppDir directory tree..."
@@ -53,15 +65,13 @@ StartupNotify=true
 EOF
 
 # 6. Create the AppRun Entry Script
-# Preserves CLI flags like --background and user script arguments
 echo "==> Generating AppRun entrypoint..."
 cat <<'EOF' > "${APP_DIR}/AppRun"
 #!/usr/bin/env bash
 SELF_DIR="$(dirname "$(readlink -f "${0}")")"
 export PATH="${SELF_DIR}/usr/bin:${PATH}"
-export LD_LIBRARY_PATH="${SELF_DIR}/usr/bin:${LD_LIBRARY_PATH}"
 
-# Execute target binary while forwarding all terminal arguments
+# PyInstaller onedir sets up internal library paths automatically
 exec "${SELF_DIR}/usr/bin/zeroxe" "$@"
 EOF
 chmod +x "${APP_DIR}/AppRun"
@@ -78,9 +88,10 @@ fi
 echo "==> Assembling final AppImage binary..."
 cd "${PROJECT_ROOT}"
 
-# Disable embedded runtime fallback when building inside Docker or unprivileged containers
+# Disable embedded runtime fallback and enable extract-and-run without FUSE (for Docker/CI)
 export ARCH=x86_64
-"${APPIMAGE_TOOL}" --no-appstream "${APP_DIR}" "${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
+export APPIMAGE_EXTRACT_AND_RUN=1
+"${APPIMAGE_TOOL}" --appimage-extract-and-run --no-appstream "${APP_DIR}" "${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
 
 echo "=================================================="
 echo "AppImage build completed successfully!"

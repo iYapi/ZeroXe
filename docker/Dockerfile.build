@@ -1,0 +1,63 @@
+# Build portable AppImage using Ubuntu 22.04 LTS (GLIBC 2.35)
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV APPIMAGE_EXTRACT_AND_RUN=1
+
+# Install build dependencies, Python, GLib, and Qt/X11 runtime libraries
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    libglib2.0-0 \
+    libgl1-mesa-dev \
+    libgl1 \
+    libegl1 \
+    libxkbcommon-x11-0 \
+    libxkbcommon0 \
+    libdbus-1-3 \
+    libfontconfig1 \
+    libfreetype6 \
+    libxcb1 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-shm0 \
+    libxcb-sync1 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxcb-xinput0 \
+    libx11-xcb1 \
+    file \
+    fuse \
+    libfuse2 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /app
+
+# 1. Copy dependency files first to leverage Docker cache
+COPY pyproject.toml uv.lock* ./
+
+# 2. Sync third-party dependencies without installing root project yet
+RUN uv sync --no-install-project --dev
+
+# 3. Copy full source tree
+COPY . .
+
+# 4. Compile UI files and sync final workspace
+RUN uv run python scripts/compile_ui.py
+RUN uv sync --dev
+
+# Run compilation and AppImage build
+RUN chmod +x scripts/build_appimage.sh scripts/compile_ui.py
+CMD ["bash", "scripts/build_appimage.sh"]
