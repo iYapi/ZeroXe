@@ -5,9 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/api/gazu_client.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/config.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -76,7 +74,8 @@
       <workItem from="1788756054639" duration="1978000" />
       <workItem from="1789357058957" duration="7000" />
       <workItem from="1790650623202" duration="1981000" />
-      <workItem from="1790663861187" duration="8174000" />
+      <workItem from="1790663861187" duration="9216000" />
+      <workItem from="1790733613541" duration="725000" />
     </task>
     <servers />
   </component>
