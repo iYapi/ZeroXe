@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
 from zeroxe import config
 from zeroxe.api.update_api import UpdateAPI
 from zeroxe.views.launcher_view import LauncherView
+from zeroxe.views.settings_view import SettingsView
+
 
 class UpdateWorker(QThread):
     status_updated = Signal(str)
@@ -66,6 +68,8 @@ class MainView(QMainWindow):
         self._create_menu_bar()
         self._setup_ui()
 
+        self.settings = None
+
     def _setup_ui(self):
         self.tab_widget = QTabWidget(self)
         self.launcher_view = LauncherView(self)
@@ -74,6 +78,12 @@ class MainView(QMainWindow):
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
+
+        edit_menu = menubar.addMenu('&Edit')
+        settings_action = QAction('&Settings', self)
+        settings_action.triggered.connect(self.on_settings)
+        edit_menu.addAction(settings_action)
+
         help_menu = menubar.addMenu('&Help')
         check_update_action = QAction('&Check for update', self)
         check_update_action.triggered.connect(self.on_check_update)
@@ -82,6 +92,15 @@ class MainView(QMainWindow):
         about_action = QAction('&About', self)
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
+
+    def on_settings(self):
+        if self.settings is None:
+            self.settings = SettingsView()
+
+        if self.settings.isVisible():
+            self.settings.hide()
+        else:
+            self.settings.show()
 
     def on_check_update(self):
         self.update_window = QWidget(self, Qt.WindowType.Window)
