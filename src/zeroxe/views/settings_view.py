@@ -15,6 +15,7 @@ from zeroxe.services.launcher_service import LauncherService
 from zeroxe.ui.ui_settings import Ui_Form
 from zeroxe.ui.ui_kitsu_setting import Ui_Form as KitsuSettingUi
 from zeroxe.ui.ui_software_setting import Ui_Form as SoftwareSettingUi
+from zeroxe.controllers.setting_controller import SettingController
 
 
 class SettingsView(QWidget):
@@ -46,3 +47,5 @@ class SettingsView(QWidget):
         self.ui.listWidget_menu.setCurrentRow(0)
 
         self.ui.pushButton_exit.clicked.connect(self.close)
+
+        self.controller = SettingController(self)
