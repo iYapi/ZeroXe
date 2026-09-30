@@ -6,31 +6,39 @@ This document outlines the architectural patterns, folder structure, and coding 
 
 ## 1. Architectural Overview
 
-ZeroXe follows a decoupled **Layered MVC (Model-View-Controller/Service)** architecture.
+ZeroXe follows a decoupled **Layered MVC (Model - View - Controller - Service)** architecture.
 
 ```mermaid
 graph TD
     subgraph UI_Layer [Presentation Layer]
         Designer[Qt Designer .ui files] -->|compile_ui.py| GenUI[src/zeroxe/ui/ui_*.py]
-        GenUI --> View[src/zeroxe/views/*_view.py]
+        GenUI --> View[src/zeroxe/views/*_view.py QWidget]
     end
 
-    subgraph Logic_Layer [Logic & Orchestration]
-        View -->|User Action / Signals| Service[src/zeroxe/services/*_service.py]
-        Worker[src/zeroxe/services/workers.py QThread] -.->|Signals / Callbacks| View
+    subgraph Controller_Layer [Orchestration Layer]
+        View <-->|Signals & UI Events| Controller[src/zeroxe/controllers/*_controller.py]
     end
 
-    subgraph Data_Layer [Data & Backend]
+    subgraph Service_Layer [Business & Logic Layer]
+        Controller -->|Calls Logic / Operations| Service[src/zeroxe/services/*_service.py]
+        Worker[src/zeroxe/services/workers.py QThread] -.->|Async Signals| View
+    end
+
+    subgraph Data_Layer [Data & Storage]
         Service --> Model[src/zeroxe/models/*_model.py]
-        Service --> API[src/zeroxe/api/*_api.py / DB / Gazu]
+        Service --> Storage[QSettings / Local Config]
+        Service --> Security[src/zeroxe/utils/security.py]
+        Service --> API[src/zeroxe/api/*_api.py / Gazu / Kitsu]
     end
 ```
 
 ### Golden Rules
-1. **Never edit generated UI files (`src/zeroxe/ui/ui_*.py`) directly.** They will be overwritten when recompiled.
-2. **The View must know nothing about database/API details.** The view only renders data passed to it and captures user interactions.
-3. **Services must not import PySide6 UI widgets.** Services should remain pure Python to allow unit testing with `pytest` without a GUI session.
-4. **Long operations must never block the Main GUI thread.** Use `QThread` or `QThreadPool` for network calls (e.g. Gazu / downloads) or heavy disk I/O.
+1. **Never edit generated UI files (`src/zeroxe/ui/ui_*.py`) directly.** They will be overwritten when recompiled by `compile_ui.py`.
+2. **`ui/` is not `views/`.** `ui/` contains auto-generated layout builders (`Ui_Form`). `views/` are real `QWidget` classes that assemble widgets, stack layouts, and configure Qt Item Models.
+3. **Controllers coordinate UI actions.** Controllers connect widget signals to handlers, open file dialogs, validate user input, and delegate heavy lifting to Services.
+4. **Services must remain Pure Python (No GUI imports).** Services do not import `QWidget` or `QPushButton`. They can be tested headlessly using `pytest`.
+5. **Long operations must never block the Main GUI thread.** Use `QThread` workers for network calls (e.g. Gazu / Kitsu / downloads) or heavy disk I/O.
+6. **Encrypt sensitive credentials locally.** Passwords and tokens stored on disk must be encrypted using `src/zeroxe/utils/security.py` before writing to `QSettings`.
 
 ---
 
@@ -40,18 +48,23 @@ graph TD
 ZeroXe/
 ├── assets/                    # Icons, stylesheets (.qss), static media
 ├── docs/                      # Developer documentation and guides
-├── scripts/                   # Build, compilation, and automation scripts
+├── scripts/                   # Build, compilation, and packaging scripts
 │   ├── compile_ui.py          # Auto-compiles ui/*.ui to src/zeroxe/ui/ui_*.py
 │   ├── build_executable.py    # Standalone PyInstaller packager
 │   └── build_appimage.sh      # Linux AppImage builder
 ├── ui/                        # Qt Designer source files (*.ui, *.qrc)
-│   └── launcher.ui
+│   ├── launcher.ui
+│   ├── settings.ui
+│   ├── kitsu_setting.ui
+│   └── software_setting.ui
 └── src/
     └── zeroxe/
         ├── api/               # External API integrations (Gazu, Kitsu, HTTP APIs)
+        ├── controllers/       # UI flow mediators & event handlers (SettingController)
         ├── models/            # Pure data classes / schemas / domain entities
         ├── services/          # Business logic, data processing, background workers
         ├── ui/                # Generated PySide6 Python UI files (DO NOT EDIT)
+        ├── utils/             # Helper utilities (security/encryption, paths)
         ├── views/             # Custom QWidget / QMainWindow classes (View logic)
         ├── config.py          # App constants, environment settings, version info
         └── main.py            # Application entrypoint
@@ -59,10 +72,10 @@ ZeroXe/
 
 ---
 
-## 3. Layer by Layer Implementation Guide
+## 3. Layer-by-Layer Implementation Guide
 
 ### Layer A: The Model (`src/zeroxe/models/`)
-Models define the shape and types of your data. Use standard Python `@dataclass` or `pydantic`.
+Models define the shape and types of your domain data. Use standard Python `@dataclass` or `pydantic`.
 
 ```python
 # src/zeroxe/models/project_model.py
@@ -96,145 +109,149 @@ class Project:
 
 ---
 
-### Layer B: The Service / Data Processing (`src/zeroxe/services/`)
-Services handle:
-- Data fetching (Gazu / Kitsu / SQLite / REST)
-- File system operations & path resolution
-- Application execution (launching Maya, Blender, Houdini, etc.)
-- Data transformations
+### Layer B: The Service (`src/zeroxe/services/`)
+Services handle pure business logic, data persistence, and external execution with **zero Qt GUI dependencies**:
+- Querying APIs (Gazu, Kitsu, REST)
+- Reading/writing persistent configuration via `SettingsService`
+- Launching external software (Blender, PureRef, Maya)
+- Performing data transformations
 
 ```python
-# src/zeroxe/services/project_service.py
-from typing import List, Dict, Any
-from zeroxe.models.project_model import Project, AssetShotItem
+# src/zeroxe/services/settings_service.py
+from typing import List
+from PySide6.QtCore import QSettings
+from zeroxe import config
+from zeroxe.utils.security import decrypt_string
 
-class ProjectService:
+class SettingsService:
     @classmethod
-    def get_projects(cls) -> List[Project]:
-        """Fetch and parse projects into strongly-typed models."""
-        # 1. Fetch raw data from API / Database / Mock
-        raw_projects = [
-            {"id": "p1", "name": "Cyberpunk_2026", "code": "CPK"},
-            {"id": "p2", "name": "SciFi_Short", "code": "SFS"},
-        ]
-        # 2. Transform into domain models
-        return [Project(id=p["id"], name=p["name"], code=p["code"]) for p in raw_projects]
+    def _settings(cls) -> QSettings:
+        return QSettings(config.ORGANIZATION_NAME, config.APP_NAME)
 
     @classmethod
-    def launch_dcc(cls, app_name: str, file_path: str) -> None:
-        """Launch external DCC software."""
-        import subprocess
-        # Resolve application binary path and launch
-        subprocess.Popen([app_name, file_path])
+    def get_kitsu_url(cls) -> str:
+        return cls._settings().value("kitsu/url", config.KITSU_API_URL, type=str)
+
+    @classmethod
+    def get_kitsu_email(cls) -> str:
+        return cls._settings().value("kitsu/email", "", type=str)
+
+    @classmethod
+    def get_kitsu_password(cls) -> str:
+        """Retrieve and decrypt stored Kitsu password."""
+        encrypted_pwd = cls._settings().value("kitsu/password_enc", "", type=str)
+        return decrypt_string(encrypted_pwd)
+
+    @classmethod
+    def get_active_blender(cls) -> str:
+        return cls._settings().value("software/active_blender", "", type=str)
 ```
 
 ---
 
 ### Layer C: The View (`src/zeroxe/views/`)
-The View is responsible for:
-- Initializing the generated `Ui_Form` or `Ui_MainWindow`
-- Setting up Qt Models (`QStandardItemModel`, `QSortFilterProxyModel`)
-- Connecting widget signals (`clicked`, `textChanged`, `currentChanged`) to methods
-- Calling Services to retrieve data and updating UI models
+The View manages presentation and visual components:
+- Initializes the compiled `Ui_Form`
+- Combines child widgets or pages inside `QStackedWidget` / `QTabWidget`
+- Configures Qt data models (`QStandardItemModel`, `QSortFilterProxyModel`)
+- Instantiates its corresponding Controller
 
 ```python
-# src/zeroxe/views/launcher_view.py
-from PySide6.QtCore import Qt, QSortFilterProxyModel
-from PySide6.QtGui import QStandardItem, QStandardItemModel
-from PySide6.QtWidgets import QWidget, QButtonGroup, QAbstractItemView
+# src/zeroxe/views/settings_view.py
+from typing import Optional
+from PySide6.QtWidgets import QStackedWidget, QWidget
 
-from zeroxe.ui.ui_launcher import Ui_Form
-from zeroxe.services.launcher_service import LauncherService
+from zeroxe.controllers.setting_controller import SettingController
+from zeroxe.ui.ui_kitsu_setting import Ui_Form as KitsuSettingUi
+from zeroxe.ui.ui_settings import Ui_Form
+from zeroxe.ui.ui_software_setting import Ui_Form as SoftwareSettingUi
 
-class LauncherView(QWidget):
-    def __init__(self, parent=None):
+class SettingsView(QWidget):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        # 1. Initialize Qt Models
-        self.project_model = QStandardItemModel(self)
-        self.ui.listView_project.setModel(self.project_model)
+        # 1. Setup Stacked Sub-pages
+        self.kitsu_widget = QWidget()
+        self.kitsu_ui = KitsuSettingUi()
+        self.kitsu_ui.setupUi(self.kitsu_widget)
 
-        # 2. Setup Search Filter Proxy Model
-        self.item_source_model = QStandardItemModel(self)
-        self.item_proxy_model = QSortFilterProxyModel(self)
-        self.item_proxy_model.setSourceModel(self.item_source_model)
-        self.item_proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.ui.listView_assetList.setModel(self.item_proxy_model)
+        self.software_widget = QWidget()
+        self.software_ui = SoftwareSettingUi()
+        self.software_ui.setupUi(self.software_widget)
 
-        # 3. Connect Signals
-        self._setup_signals()
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.kitsu_widget)
+        self.stack.addWidget(self.software_widget)
+        self.ui.verticalLayout.addWidget(self.stack)
 
-        # 4. Populate Initial Data
-        self._load_projects()
-
-    def _setup_signals(self):
-        # Instant search filtering
-        self.ui.lineEdit_searchAsset.textChanged.connect(
-            self.item_proxy_model.setFilterFixedString
-        )
-        # Selection changed
-        self.ui.listView_project.selectionModel().currentChanged.connect(self._on_project_selected)
-
-    def _load_projects(self):
-        self.project_model.clear()
-        projects = LauncherService.get_projects()
-        for p in projects:
-            item = QStandardItem(p["name"])
-            # Store full data object in UserRole
-            item.setData(p, Qt.ItemDataRole.UserRole)
-            self.project_model.appendRow(item)
-
-    def _on_project_selected(self, current, previous):
-        if not current.isValid():
-            return
-        project_data = current.data(Qt.ItemDataRole.UserRole)
-        # Fetch items via Service and update view...
+        # 2. Attach Controller
+        self.controller = SettingController(self)
 ```
 
 ---
 
-## 4. Asynchronous Execution Pattern (Background QThread)
+### Layer D: The Controller (`src/zeroxe/controllers/`)
+The Controller bridges user actions from the View to backend Services:
+- Wires button signals (`clicked`, `textChanged`, `itemClicked`)
+- Opens UI dialogs (`QFileDialog`, `QMessageBox`)
+- Encrypts sensitive inputs and saves configurations
+- Populates View form fields upon loading
 
-Never perform network requests or long-running computations directly on the main GUI thread. Use `QThread` workers to keep the interface smooth and responsive.
-
-```mermaid
-sequenceDiagram
-    participant User as User / GUI
-    participant View as LauncherView
-    participant Worker as DataFetchWorker (QThread)
-    participant Service as Gazu / Kitsu API
-
-    User->>View: Selects Project
-    View->>View: Show loading spinner / Disable controls
-    View->>Worker: worker.start()
-    Worker->>Service: Fetch shots & versions (I/O)
-    Service-->>Worker: Return JSON / Data
-    Worker-->>View: emit data_loaded(results)
-    View->>View: Populate QStandardItemModel & Hide spinner
-```
-
-### Worker Implementation Template:
 ```python
-from PySide6.QtCore import QThread, Signal
+# src/zeroxe/controllers/setting_controller.py
+from PySide6.QtCore import QObject, QSettings
+from PySide6.QtWidgets import QFileDialog, QMessageBox
+from zeroxe import config
+from zeroxe.utils.security import decrypt_string, encrypt_string
 
-class DataFetchWorker(QThread):
-    data_loaded = Signal(list)
-    error_occurred = Signal(str)
+class SettingController(QObject):
+    def __init__(self, view):
+        super().__init__(view)
+        self.view = view
+        self.settings = QSettings(config.ORGANIZATION_NAME, config.APP_NAME)
 
-    def __init__(self, project_id: str):
-        super().__init__()
-        self.project_id = project_id
+        self._bind_signals()
+        self.load_settings()
 
-    def run(self):
-        try:
-            # Heavy I/O or network API call in background
-            items = LauncherService.get_items(self.project_id, "Shot")
-            self.data_loaded.emit(items)
-        except Exception as e:
-            self.error_occurred.emit(str(e))
+    def _bind_signals(self):
+        self.view.ui.pushButton_apply.clicked.connect(self.on_apply)
+        self.view.ui.pushButton_ok.clicked.connect(self.on_ok)
+        self.view.software_ui.toolButton_locateBlender.clicked.connect(self.on_locate_blender)
+
+    def load_settings(self):
+        self.view.kitsu_ui.lineEdit_kitsuUrl.setText(
+            self.settings.value("kitsu/url", config.KITSU_API_URL, type=str)
+        )
+        encrypted_pwd = self.settings.value("kitsu/password_enc", "", type=str)
+        self.view.kitsu_ui.lineEdit_password.setText(decrypt_string(encrypted_pwd))
+
+    def save_settings(self):
+        raw_password = self.view.kitsu_ui.lineEdit_password.text().strip()
+        self.settings.setValue("kitsu/password_enc", encrypt_string(raw_password))
+        self.settings.sync()
+
+    def on_apply(self):
+        self.save_settings()
+        QMessageBox.information(self.view, "Settings", "Settings saved successfully.")
+
+    def on_locate_blender(self):
+        file_path, _ = QFileDialog.getOpenFileName(self.view, "Locate Blender")
+        if file_path:
+            self.view.software_ui.lineEdit_kitsuUrl.setText(file_path)
 ```
+
+---
+
+## 4. Security & Credential Encryption (`src/zeroxe/utils/security.py`)
+
+ZeroXe avoids storing raw plain-text credentials in config files or the Windows Registry.
+
+- **PBKDF2 HMAC-SHA256**: Generates a 32-byte key derived from machine hardware (`uuid.getnode()`), current username (`getpass.getuser()`), and application identifiers.
+- **XOR Stream Cipher**: Combines a 16-byte random salt with SHA-256 keystream encryption.
+- **Base64 Packaging**: Outputs an opaque token (e.g. `OaWo7MLM...`) that cannot be decrypted outside the current user machine.
+- **Zero External Dependencies**: Works out-of-the-box using the Python standard library.
 
 ---
 
@@ -243,9 +260,10 @@ class DataFetchWorker(QThread):
 | Component | Responsibility | Where it lives |
 | :--- | :--- | :--- |
 | **Qt UI Source** | Visual layout created in Qt Designer | `ui/*.ui` |
-| **Compiled UI** | Python class (`Ui_Form`) generated by uic | `src/zeroxe/ui/ui_*.py` |
+| **Compiled UI** | Python layout class (`Ui_Form`) generated by uic | `src/zeroxe/ui/ui_*.py` |
+| **View** | Custom `QWidget`, tab/stack assembly, Qt Item Models | `src/zeroxe/views/` |
+| **Controller** | Event handling, dialogs, form validation, service calls | `src/zeroxe/controllers/` |
+| **Service** | API requests, launching software, persistent I/O | `src/zeroxe/services/` |
+| **Security** | Machine-bound credential encryption/decryption | `src/zeroxe/utils/security.py` |
 | **Model** | Data structures, type hints, dataclasses | `src/zeroxe/models/` |
-| **Service** | API requests, database queries, logic, file I/O | `src/zeroxe/services/` |
-| **Worker** | Non-blocking background threads (`QThread`) | `src/zeroxe/services/` |
-| **View** | Widget event wiring, Qt models, UI updates | `src/zeroxe/views/` |
 | **Main Window** | Container window, menu bar, tabs | `src/zeroxe/views/main_view.py` |

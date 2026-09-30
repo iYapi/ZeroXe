@@ -4,16 +4,16 @@ A practical step-by-step guide for creating new features, screens, and component
 
 ---
 
-## Step-by-Step: Adding a New Screen / Tab
+## Step-by-Step: Adding a New Screen / Feature
 
-Follow these 5 steps whenever you create a new UI feature:
+Follow these 6 steps whenever you create a new UI feature:
 
 ### Step 1: Design the UI in Qt Designer
-1. Open Qt Designer (or use `.venv/bin/pyside6-designer`).
+1. Open Qt Designer (or use `pyside6-designer`).
 2. Create a `Widget` (or `Dialog` / `MainWindow`).
 3. Save the file into the `ui/` directory (e.g. `ui/settings.ui`).
 4. **Naming Convention**: Give widgets clear `objectName` identifiers:
-   - Buttons: `pushButton_save`, `pushButton_cancel`
+   - Buttons: `pushButton_apply`, `pushButton_exit`
    - Inputs: `lineEdit_search`, `comboBox_app`
    - Views: `listView_items`, `tableView_details`
    - Labels: `label_title`, `label_status`
@@ -31,12 +31,12 @@ python scripts/compile_ui.py
 python scripts/compile_ui.py --watch
 ```
 
-This generates `src/zeroxe/ui/ui_settings.py` containing the `Ui_Form` class.
+This generates `src/zeroxe/ui/ui_settings.py` containing the compiled `Ui_Form` class.
 
 ---
 
 ### Step 3: Define Data Models (`src/zeroxe/models/`)
-Create a dataclass representing the data your screen handles:
+Create a dataclass representing the data your feature handles:
 
 ```python
 # src/zeroxe/models/settings_model.py
@@ -51,87 +51,95 @@ class AppSettings:
 
 ---
 
-### Step 4: Implement the Service / Logic Layer (`src/zeroxe/services/`)
-Create pure Python logic to fetch, save, or process data:
+### Step 4: Implement the Service Layer (`src/zeroxe/services/`)
+Create pure Python logic to fetch, save, or process data without importing Qt GUI widgets:
 
 ```python
 # src/zeroxe/services/settings_service.py
-import json
-from pathlib import Path
-from zeroxe.models.settings_model import AppSettings
+from typing import List
+from PySide6.QtCore import QSettings
+from zeroxe import config
+from zeroxe.utils.security import decrypt_string
 
 class SettingsService:
-    CONFIG_PATH = Path.home() / ".zeroxe" / "config.json"
+    @classmethod
+    def _settings(cls) -> QSettings:
+        return QSettings(config.ORGANIZATION_NAME, config.APP_NAME)
 
     @classmethod
-    def load_settings(cls) -> AppSettings:
-        if not cls.CONFIG_PATH.exists():
-            return AppSettings(default_project="", dcc_executable_path="")
-        with open(cls.CONFIG_PATH, "r") as f:
-            data = json.load(f)
-            return AppSettings(**data)
+    def get_kitsu_password(cls) -> str:
+        encrypted = cls._settings().value("kitsu/password_enc", "", type=str)
+        return decrypt_string(encrypted)
 
     @classmethod
-    def save_settings(cls, settings: AppSettings) -> bool:
-        cls.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(cls.CONFIG_PATH, "w") as f:
-            json.dump(settings.__dict__, f, indent=2)
-        return True
+    def get_active_blender(cls) -> str:
+        return cls._settings().value("software/active_blender", "", type=str)
 ```
 
 ---
 
-### Step 5: Implement the View Layer (`src/zeroxe/views/`)
-Create the view widget that inherits from `QWidget`, sets up `Ui_Form`, and connects user interactions:
+### Step 5: Implement the Controller Layer (`src/zeroxe/controllers/`)
+Create the Controller to wire signals, validate forms, open file dialogs, and call Services:
+
+```python
+# src/zeroxe/controllers/setting_controller.py
+from PySide6.QtCore import QObject, QSettings
+from PySide6.QtWidgets import QFileDialog, QMessageBox
+from zeroxe import config
+from zeroxe.utils.security import decrypt_string, encrypt_string
+
+class SettingController(QObject):
+    def __init__(self, view):
+        super().__init__(view)
+        self.view = view
+        self.settings = QSettings(config.ORGANIZATION_NAME, config.APP_NAME)
+
+        self._bind_signals()
+        self.load_settings()
+
+    def _bind_signals(self):
+        self.view.ui.pushButton_apply.clicked.connect(self.on_apply)
+        self.view.software_ui.toolButton_locateBlender.clicked.connect(self.on_locate_blender)
+
+    def load_settings(self):
+        encrypted = self.settings.value("kitsu/password_enc", "", type=str)
+        self.view.kitsu_ui.lineEdit_password.setText(decrypt_string(encrypted))
+
+    def save_settings(self):
+        raw_password = self.view.kitsu_ui.lineEdit_password.text().strip()
+        self.settings.setValue("kitsu/password_enc", encrypt_string(raw_password))
+        self.settings.sync()
+
+    def on_apply(self):
+        self.save_settings()
+        QMessageBox.information(self.view, "Settings", "Settings saved successfully.")
+
+    def on_locate_blender(self):
+        file_path, _ = QFileDialog.getOpenFileName(self.view, "Locate Blender")
+        if file_path:
+            self.view.software_ui.lineEdit_kitsuUrl.setText(file_path)
+```
+
+---
+
+### Step 6: Implement the View Layer (`src/zeroxe/views/`)
+Create the `QWidget` container, assemble any child pages, and attach the Controller:
 
 ```python
 # src/zeroxe/views/settings_view.py
-from PySide6.QtWidgets import QWidget, QMessageBox
+from typing import Optional
+from PySide6.QtWidgets import QWidget, QStackedWidget
+from zeroxe.controllers.setting_controller import SettingController
 from zeroxe.ui.ui_settings import Ui_Form
-from zeroxe.services.settings_service import SettingsService
 
 class SettingsView(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        # Connect signals
-        self.ui.pushButton_save.clicked.connect(self._on_save_clicked)
-
-        # Load initial values
-        self._load_values()
-
-    def _load_values(self):
-        settings = SettingsService.load_settings()
-        self.ui.lineEdit_project.setText(settings.default_project)
-        self.ui.checkBox_update.setChecked(settings.auto_check_update)
-
-    def _on_save_clicked(self):
-        # Read from UI and pass to Service
-        pass
-```
-
----
-
-### Step 6: Register into Main Window (`src/zeroxe/views/main_view.py`)
-Add your new view to the main tab widget or navigation bar:
-
-```python
-from zeroxe.views.launcher_view import LauncherView
-from zeroxe.views.settings_view import SettingsView
-
-class MainView(QMainWindow):
-    def _setup_ui(self):
-        self.tab_widget = QTabWidget(self)
-        
-        self.launcher_view = LauncherView(self)
-        self.settings_view = SettingsView(self)
-        
-        self.tab_widget.addTab(self.launcher_view, "Launcher")
-        self.tab_widget.addTab(self.settings_view, "Settings")
-        
-        self.setCentralWidget(self.tab_widget)
+        # Attach Controller
+        self.controller = SettingController(self)
 ```
 
 ---
@@ -178,7 +186,7 @@ self.ui.lineEdit_search.textChanged.connect(self.proxy_model.setFilterFixedStrin
 
 ```bash
 # Run application
-uv run python -m zeroxe.main
+python -m zeroxe.main
 
 # Compile all UI files
 python scripts/compile_ui.py
@@ -187,7 +195,7 @@ python scripts/compile_ui.py
 python scripts/compile_ui.py --watch
 
 # Build standalone desktop executable (PyInstaller)
-uv run python scripts/build_executable.py --onedir
+python scripts/build_executable.py --onedir
 
 # Build AppImage for local system
 ./scripts/build_appimage.sh
@@ -205,4 +213,3 @@ uv run python scripts/build_executable.py --onedir
 > `ImportError: /lib64/libm.so.6: version 'GLIBC_2.44' not found`
 >
 > **Solution**: Always use `./scripts/build_appimage_docker.sh` to package production AppImages against an Ubuntu 22.04 LTS (GLIBC 2.35) baseline so it runs across all Linux distributions.
-
