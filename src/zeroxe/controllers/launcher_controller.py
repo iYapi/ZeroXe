@@ -160,7 +160,7 @@ class LauncherController(QObject):
         try:
             target_ep = next((ep for ep in self.current_episodes if ep.name == selected_category), None)
             if target_ep:
-                shots = ShotService.get_shots_by_episode_id(target_ep.id)
+                shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
         except Exception as e:
             logger.error(f"Failed to fetch shots: {e}")
 
