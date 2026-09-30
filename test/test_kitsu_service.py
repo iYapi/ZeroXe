@@ -6,7 +6,7 @@ from zeroxe.services.project_service import ProjectService
 from zeroxe.services.department_service import DepartmentService
 from zeroxe.services.shot_service import ShotService
 
-PRINTOUT = False
+PRINTOUT = True
 
 kitsu_host = os.getenv("KITSU_HOST", "http://localhost:8080/api")
 kitsu_email = os.getenv("KITSU_EMAIL", "user@example.com")

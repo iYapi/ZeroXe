@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
-from zeroxe.services.launcher_service import LauncherService
 from zeroxe.ui.ui_settings import Ui_Form
 from zeroxe.ui.ui_kitsu_setting import Ui_Form as KitsuSettingUi
 from zeroxe.ui.ui_software_setting import Ui_Form as SoftwareSettingUi

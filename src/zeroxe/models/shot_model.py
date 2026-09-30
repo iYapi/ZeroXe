@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+
 @dataclass
 class Shot:
     id: str
@@ -11,9 +12,9 @@ class Shot:
     episode: str
     preview_file_id: str
     resolution: str
-    fps: float
-    frame_in: float
-    frame_out: float
+    fps: int
+    frame_in: int
+    frame_out: int
     assets: List
     # set: str
     # char: str
@@ -23,6 +24,7 @@ class Shot:
 
     @classmethod
     def from_kitsu(cls, data: Dict[str, Any]) -> "Shot":
+        custom_data = data.get("data") if isinstance(data.get("data"), dict) else {}
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
@@ -30,18 +32,19 @@ class Shot:
             sequence=data.get("sequence", ""),
             episode_id=data.get("episode_id", ""),
             episode=data.get("episode", ""),
-            preview_file_id=data.get("preview_file_id", ""),
-            resolution=data.get("data", {}).get("resolution", ""),
-            fps=data.get("data", {}).get("fps", 0),
-            frame_in=data.get("data", {}).get("frame_in", 0),
-            frame_out=data.get("data", {}).get("frame_out", 0),
-            assets=data.get("assets", []),
+            preview_file_id=data.get("preview_file_id", "") or "",
+            resolution=str(custom_data.get("resolution", "") or ""),
+            fps=int(custom_data.get("fps") or 0),
+            frame_in=int(custom_data.get("frame_in") or 0),
+            frame_out=int(custom_data.get("frame_out") or 0),
+            assets=data.get("assets", []) if isinstance(data.get("assets"), list) else [],
             # set=data.get("set", ""),
             # char=data.get("char", ""),
             # prop=data.get("prop", ""),
             # ms_lit=data.get("ms_lit", ""),
             # ms_comp=data.get("ms_comp", ""),
         )
+
 
 @dataclass
 class Episode:
@@ -54,8 +57,9 @@ class Episode:
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
-            project_id=data.get("project_id", "")
+            project_id=data.get("project_id", ""),
         )
+
 
 @dataclass
 class Sequence:
@@ -70,5 +74,5 @@ class Sequence:
             id=data.get("id", ""),
             name=data.get("name", ""),
             episode_id=data.get("parent_id", ""),
-            project_id=data.get("project_id", "")
+            project_id=data.get("project_id", ""),
         )
