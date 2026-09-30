@@ -1,5 +1,6 @@
 import sys
 from zeroxe import config
+from zeroxe.api.gazu_client import init_kitsu
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -14,6 +15,8 @@ def run():
     app.setApplicationVersion(config.APP_VERSION)
     app.setOrganizationName(config.ORGANIZATION_NAME)
     app.setOrganizationDomain(config.ORGANIZATION_DOMAIN)
+
+    init_kitsu()
 
     window = MainView()
     window.show()

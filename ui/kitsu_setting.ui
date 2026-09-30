@@ -16,30 +16,30 @@
   <layout class="QGridLayout" name="gridLayout_2">
    <item row="0" column="0">
     <layout class="QGridLayout" name="gridLayout">
-     <item row="0" column="0" colspan="3">
-      <widget class="QLabel" name="label_title">
-       <property name="text">
-        <string>Kitsu</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="1" colspan="2">
-      <widget class="QLineEdit" name="lineEdit_email"/>
-     </item>
-     <item row="6" column="0">
-      <widget class="QLabel" name="label_email">
-       <property name="text">
-        <string>Email:</string>
-       </property>
-      </widget>
-     </item>
      <item row="4" column="0" colspan="3">
       <widget class="Line" name="line">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+      </widget>
+     </item>
+     <item row="9" column="0" colspan="3">
+      <spacer name="verticalSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>40</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="label_kitsuUrl">
+       <property name="text">
+        <string>Kitsu URL:</string>
        </property>
       </widget>
      </item>
@@ -53,19 +53,18 @@
        </property>
       </widget>
      </item>
-     <item row="7" column="0">
-      <widget class="QLabel" name="label_password">
-       <property name="text">
-        <string>Password:</string>
+     <item row="1" column="0" colspan="3">
+      <widget class="Line" name="line_2">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
        </property>
       </widget>
      </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_kitsuUrl">
-       <property name="text">
-        <string>Kitsu URL:</string>
-       </property>
-      </widget>
+     <item row="6" column="1" colspan="2">
+      <widget class="QLineEdit" name="lineEdit_email"/>
+     </item>
+     <item row="3" column="1" colspan="2">
+      <widget class="QLineEdit" name="lineEdit_kitsuUrl"/>
      </item>
      <item row="7" column="1" colspan="2">
       <widget class="QLineEdit" name="lineEdit_password">
@@ -74,28 +73,36 @@
        </property>
       </widget>
      </item>
-     <item row="3" column="1" colspan="2">
-      <widget class="QLineEdit" name="lineEdit_kitsuUrl"/>
+     <item row="7" column="0">
+      <widget class="QLabel" name="label_password">
+       <property name="text">
+        <string>Password:</string>
+       </property>
+      </widget>
      </item>
-     <item row="1" column="0" colspan="3">
-      <widget class="Line" name="line_2">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
+     <item row="0" column="0" colspan="3">
+      <widget class="QLabel" name="label_title">
+       <property name="text">
+        <string>Kitsu</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="0">
+      <widget class="QLabel" name="label_email">
+       <property name="text">
+        <string>Email:</string>
        </property>
       </widget>
      </item>
      <item row="8" column="0" colspan="3">
-      <spacer name="verticalSpacer">
-       <property name="orientation">
-        <enum>Qt::Orientation::Vertical</enum>
+      <widget class="QPushButton" name="pushButton_login">
+       <property name="text">
+        <string>LogIn</string>
        </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>20</width>
-         <height>40</height>
-        </size>
-       </property>
-      </spacer>
+      </widget>
      </item>
     </layout>
    </item>

@@ -6,9 +6,10 @@ and user interactions for SettingsView. Encrypts sensitive credentials locally.
 
 from typing import TYPE_CHECKING, Optional
 from PySide6.QtCore import QObject, QSettings
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from zeroxe import config
+from zeroxe.api.gazu_client import init_kitsu
 from zeroxe.utils.security import decrypt_string, encrypt_string
 
 if TYPE_CHECKING:
@@ -42,6 +43,9 @@ class SettingController(QObject):
 
         # Software Settings - PureRef
         sw_ui.pushButton_locatePureref.clicked.connect(self.on_locate_pureref)
+
+        # Kitsu Login
+        self.view.kitsu_ui.pushButton_login.clicked.connect(self.on_login_kitsu)
 
     # ------------------------------------------------------------------
     # Settings Load & Save
@@ -114,6 +118,45 @@ class SettingController(QObject):
         """Apply changes and close dialog."""
         self.save_settings()
         self.view.close()
+
+    def on_login_kitsu(self) -> None:
+        """Authenticate with Kitsu using currently entered form values."""
+        url = self.view.kitsu_ui.lineEdit_kitsuUrl.text().strip()
+        email = self.view.kitsu_ui.lineEdit_email.text().strip()
+        password = self.view.kitsu_ui.lineEdit_password.text().strip()
+
+        if not url or not email or not password:
+            QMessageBox.warning(
+                self.view,
+                "Missing Information",
+                "Please fill in Kitsu URL, Email, and Password before attempting to log in.",
+            )
+            return
+
+        login_btn = self.view.kitsu_ui.pushButton_login
+        login_btn.setEnabled(False)
+        login_btn.setText("Logging in...")
+        QApplication.processEvents()
+
+        try:
+            success, message = init_kitsu(url=url, email=email, password=password)
+            if success:
+                # Automatically persist settings upon successful login
+                self.save_settings()
+                QMessageBox.information(
+                    self.view,
+                    "Kitsu Login",
+                    f"Successfully connected to Kitsu!\n\nLogged in as: {email}",
+                )
+            else:
+                QMessageBox.critical(
+                    self.view,
+                    "Kitsu Login Failed",
+                    f"Could not log in to Kitsu:\n\n{message}",
+                )
+        finally:
+            login_btn.setEnabled(True)
+            login_btn.setText("LogIn")
 
     def on_locate_blender(self) -> None:
         """Open file dialog to locate Blender executable."""
