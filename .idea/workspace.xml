@@ -5,10 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/models/asset_model.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/services/asset_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/test_kitsu_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_kitsu_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/models/asset_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/models/asset_model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/asset_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/asset_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,7 +66,7 @@
       <recent name="$PROJECT_DIR$" />
     </key>
   </component>
-  <component name="RunManager" selected="Python tests.Python tests for test.test_kitsu_service.test_get_assets_by_project_id">
+  <component name="RunManager" selected="Python tests.Python tests for test.test_kitsu_service">
     <configuration name="Python tests for test.test_kitsu_service" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="zeroxe" />
       <option name="ENV_FILES" value="" />
@@ -159,11 +159,11 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python tests.Python tests for test.test_kitsu_service" />
         <item itemvalue="Python tests.Python tests for test.test_kitsu_service.test_get_assets_by_project_id" />
         <item itemvalue="Python tests.Python tests for test.test_kitsu_service.test_get_asset_types_by_project_id" />
         <item itemvalue="Python tests.Python tests for test.test_kitsu_service.test_get_all_projects" />
         <item itemvalue="Python tests.Python tests for test.test_kitsu_service.test_get_departments" />
-        <item itemvalue="Python tests.Python tests for test.test_kitsu_service" />
       </list>
     </recent_temporary>
   </component>
@@ -190,7 +190,7 @@
       <workItem from="1790663861187" duration="9216000" />
       <workItem from="1790733613541" duration="1988000" />
       <workItem from="1790740507902" duration="16250000" />
-      <workItem from="1790820377030" duration="5696000" />
+      <workItem from="1790820377030" duration="6808000" />
     </task>
     <servers />
   </component>
@@ -200,7 +200,7 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1788508944136" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
     <SUITE FILE_PATH="coverage/ZeroXe$main_view.coverage" NAME="main_view Coverage Results" MODIFIED="1788508837608" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe/views" />
-    <SUITE FILE_PATH="coverage/ZeroXe$.coverage" NAME=" Coverage Results" MODIFIED="1790837286922" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ZeroXe$.coverage" NAME=" Coverage Results" MODIFIED="1790837359551" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/ZeroXe$build_executable.coverage" NAME="build_executable Coverage Results" MODIFIED="1788510426871" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scripts" />
   </component>
 </project>

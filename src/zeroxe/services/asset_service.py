@@ -7,6 +7,7 @@ from typing import List, Optional
 import gazu
 from zeroxe.models.asset_model import Asset, AssetType
 
+
 class AssetService:
     @staticmethod
     def get_assets_by_project_id(project_id: str) -> List[Asset]:

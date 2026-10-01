@@ -4,6 +4,7 @@ Coordinates data flow between UI (LauncherView) and user domain services:
 - ProjectService
 - DepartmentService
 - ShotService
+- AssetService
 - SettingsService
 """
 
@@ -16,9 +17,11 @@ from PySide6.QtCore import QObject, Qt
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QMessageBox
 
+from zeroxe.models.asset_model import Asset, AssetType
 from zeroxe.models.department_model import Department
 from zeroxe.models.project_model import Project
 from zeroxe.models.shot_model import Episode, Sequence, Shot
+from zeroxe.services.asset_service import AssetService
 from zeroxe.services.department_service import DepartmentService
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.settings_service import SettingsService
@@ -41,11 +44,23 @@ class LauncherController(QObject):
         self.current_project: Optional[Project] = None
         self.current_department: Optional[Department] = None
         self.current_episodes: List[Episode] = []
+        self.current_asset_types: List[AssetType] = []
         self.current_shot: Optional[Shot] = None
+        self.current_asset: Optional[Asset] = None
         self.current_version: str = ""
 
         self._bind_signals()
         self.load_initial_data()
+
+    @property
+    def is_shot_mode(self) -> bool:
+        """Check if launcher is currently in Shot mode."""
+        return self.view.ui.pushButton_shot.isChecked()
+
+    @property
+    def is_asset_mode(self) -> bool:
+        """Check if launcher is currently in Asset mode."""
+        return self.view.ui.pushButton_asset.isChecked()
 
     def _bind_signals(self) -> None:
         """Wire UI events from LauncherView to controller methods."""
@@ -59,7 +74,7 @@ class LauncherController(QObject):
         # Type buttons (Shot vs Asset)
         self.view.type_group.buttonClicked.connect(self.on_type_toggled)
 
-        # Category / Episode dropdown change
+        # Category / Episode / AssetType dropdown change
         ui.comboBox_category.currentTextChanged.connect(self.on_category_changed)
 
         # Selection changes
@@ -125,23 +140,40 @@ class LauncherController(QObject):
             self.view.ui.listView_department.setCurrentIndex(first_idx)
 
     def load_categories(self, project_id: str) -> None:
-        """Fetch episodes for the project via ShotService to populate category dropdown."""
+        """Fetch categories (episodes for Shot mode, asset types for Asset mode) to populate category dropdown."""
         self.view.ui.comboBox_category.blockSignals(True)
         self.view.ui.comboBox_category.clear()
 
-        try:
-            self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
-        except Exception as e:
-            logger.error(f"Failed to fetch episodes for project {project_id}: {e}")
-            self.current_episodes = []
-
         category_items = ["None"]
-        if self.current_episodes:
-            category_items.extend([ep.name for ep in self.current_episodes if ep.name])
+        if self.is_shot_mode:
+            try:
+                self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
+            except Exception as e:
+                logger.error(f"Failed to fetch episodes for project {project_id}: {e}")
+                self.current_episodes = []
+
+            if self.current_episodes:
+                category_items.extend([ep.name for ep in self.current_episodes if ep.name])
+        else:
+            try:
+                self.current_asset_types = AssetService.get_asset_types_by_project_id(project_id)
+            except Exception as e:
+                logger.error(f"Failed to fetch asset types for project {project_id}: {e}")
+                self.current_asset_types = []
+
+            if self.current_asset_types:
+                category_items.extend([at.name for at in self.current_asset_types if at.name])
 
         self.view.ui.comboBox_category.addItems(category_items)
         self.view.ui.comboBox_category.setCurrentIndex(0)
         self.view.ui.comboBox_category.blockSignals(False)
+
+    def load_items(self) -> None:
+        """Load items (shots or assets) based on current active mode."""
+        if self.is_shot_mode:
+            self.load_shots()
+        else:
+            self.load_assets()
 
     def load_shots(self) -> None:
         """Fetch shots via ShotService and populate item list."""
@@ -180,24 +212,68 @@ class LauncherController(QObject):
         else:
             self._clear_item_details()
 
+    def load_assets(self) -> None:
+        """Fetch assets via AssetService and populate item list."""
+        if not self.current_project:
+            return
+
+        selected_category = self.view.ui.comboBox_category.currentText()
+        self.view.item_source_model.clear()
+
+        # If None is selected, keep asset list empty
+        if not selected_category or selected_category == "None":
+            self._clear_item_details()
+            return
+
+        assets: List[Asset] = []
+        try:
+            all_assets = AssetService.get_assets_by_project_id(self.current_project.id)
+            assets = [a for a in all_assets if a.asset_type == selected_category]
+        except Exception as e:
+            logger.error(f"Failed to fetch assets: {e}")
+
+        # Sort assets alphabetically by name
+        assets.sort(key=lambda a: (a.name or "").lower())
+
+        for asset in assets:
+            item = QStandardItem(asset.name)
+            item.setData(asset, Qt.ItemDataRole.UserRole)
+            self.view.item_source_model.appendRow(item)
+
+        if self.view.item_proxy_model.rowCount() > 0:
+            first_proxy_idx = self.view.item_proxy_model.index(0, 0)
+            self.view.ui.listView_assetList.setCurrentIndex(first_proxy_idx)
+        else:
+            self._clear_item_details()
+
     def update_metadata_table(self) -> None:
         """Format and update metadata property/value table."""
         self.view.metadata_model.removeRows(0, self.view.metadata_model.rowCount())
-        if not self.current_shot:
-            return
-
         dept_name = self.current_department.name if self.current_department else "None"
-        metadata: Dict[str, Any] = {
-            "Shot Name": self.current_shot.name,
-            "Sequence": self.current_shot.sequence or "None",
-            "Episode": self.current_shot.episode or "None",
-            "Department": dept_name,
-            "FPS": self.current_shot.fps,
-            "Resolution": self.current_shot.resolution or "Default",
-            "Frame Range": f"{self.current_shot.frame_in} - {self.current_shot.frame_out}",
-            "Assets Linked": len(self.current_shot.assets),
-            "Version": self.current_version or "None",
-        }
+
+        if self.current_shot:
+            metadata: Dict[str, Any] = {
+                "Shot Name": self.current_shot.name,
+                "Sequence": self.current_shot.sequence or "None",
+                "Episode": self.current_shot.episode or "None",
+                "Department": dept_name,
+                "FPS": self.current_shot.fps,
+                "Resolution": self.current_shot.resolution or "Default",
+                "Frame Range": f"{self.current_shot.frame_in} - {self.current_shot.frame_out}",
+                "Assets Linked": len(self.current_shot.assets),
+                "Version": self.current_version or "None",
+            }
+        elif self.current_asset:
+            proj_name = self.current_project.name if self.current_project else "None"
+            metadata = {
+                "Asset Name": self.current_asset.name,
+                "Asset Type": self.current_asset.asset_type or "None",
+                "Department": dept_name,
+                "Project": proj_name,
+                "Version": self.current_version or "None",
+            }
+        else:
+            return
 
         for k, v in metadata.items():
             k_item = QStandardItem(str(k))
@@ -207,6 +283,7 @@ class LauncherController(QObject):
     def _clear_item_details(self) -> None:
         """Reset item details in the view."""
         self.current_shot = None
+        self.current_asset = None
         self.current_version = ""
         self.view.version_model.clear()
         self.view.metadata_model.removeRows(0, self.view.metadata_model.rowCount())
@@ -224,7 +301,7 @@ class LauncherController(QObject):
         self.view.ui.label_project.setText(f"Project: {self.current_project.name}")
 
         self.load_categories(self.current_project.id)
-        self.load_shots()
+        self.load_items()
 
     def on_department_selected(self, current, previous) -> None:
         """Handle department selection change."""
@@ -239,32 +316,41 @@ class LauncherController(QObject):
         """Handle Shot vs Asset toggle."""
         if self.current_project:
             self.load_categories(self.current_project.id)
-            self.load_shots()
+            self.load_items()
 
     def on_category_changed(self, category_text: str) -> None:
-        """Handle category/episode selection change."""
-        self.load_shots()
+        """Handle category (episode or asset type) selection change."""
+        self.load_items()
 
     def on_item_selected(self, current, previous) -> None:
-        """Handle shot item selection."""
+        """Handle item (shot or asset) selection."""
         if not current.isValid():
             return
         source_idx = self.view.item_proxy_model.mapToSource(current)
-        self.current_shot = source_idx.data(Qt.ItemDataRole.UserRole)
+        selected_data = source_idx.data(Qt.ItemDataRole.UserRole)
 
-        if self.current_shot:
+        if isinstance(selected_data, Shot):
+            self.current_shot = selected_data
+            self.current_asset = None
             seq_name = self.current_shot.sequence or ""
             display_name = f"{seq_name}_{self.current_shot.name}" if seq_name else self.current_shot.name
             self.view.ui.label_title.setText(f"<b>{display_name}</b>")
+        elif isinstance(selected_data, Asset):
+            self.current_asset = selected_data
+            self.current_shot = None
+            self.view.ui.label_title.setText(f"<b>{self.current_asset.name}</b>")
+        else:
+            self._clear_item_details()
+            return
 
-            # Populate versions placeholder / list
-            self.view.version_model.clear()
-            for v_name in ["v001", "v002", "v003"]:
-                self.view.version_model.appendRow(QStandardItem(v_name))
+        # Populate versions placeholder / list
+        self.view.version_model.clear()
+        for v_name in ["v001", "v002", "v003"]:
+            self.view.version_model.appendRow(QStandardItem(v_name))
 
-            if self.view.version_model.rowCount() > 0:
-                first_v_idx = self.view.version_model.index(0, 0)
-                self.view.ui.listView_version.setCurrentIndex(first_v_idx)
+        if self.view.version_model.rowCount() > 0:
+            first_v_idx = self.view.version_model.index(0, 0)
+            self.view.ui.listView_version.setCurrentIndex(first_v_idx)
 
     def on_version_selected(self, current, previous) -> None:
         """Handle version selection change."""
@@ -277,7 +363,11 @@ class LauncherController(QObject):
     def on_execute_action(self) -> None:
         """Execute selected software action (e.g. Launch Blender or PureRef)."""
         action = self.view.ui.comboBox.currentText()
-        shot_name = self.current_shot.name if self.current_shot else "None"
+        item_name = (
+            self.current_shot.name
+            if self.current_shot
+            else (self.current_asset.name if self.current_asset else "None")
+        )
 
         if "Blender" in action:
             blender_path = SettingsService.get_active_blender()
@@ -290,7 +380,7 @@ class LauncherController(QObject):
                 return
             try:
                 subprocess.Popen([blender_path])
-                QMessageBox.information(self.view, "Launched", f"Launching Blender for {shot_name}...")
+                QMessageBox.information(self.view, "Launched", f"Launching Blender for {item_name}...")
             except Exception as e:
                 QMessageBox.critical(self.view, "Launch Error", f"Failed to launch Blender: {e}")
 
@@ -312,18 +402,24 @@ class LauncherController(QObject):
             QMessageBox.information(
                 self.view,
                 "Execute Action",
-                f"Action '{action}' executed for shot: {shot_name} ({self.current_version})",
+                f"Action '{action}' executed for item: {item_name} ({self.current_version})",
             )
 
     def on_open_path(self) -> None:
-        """Open shot file location."""
-        if self.current_shot:
+        """Open item file location."""
+        item_name = (
+            self.current_shot.name
+            if self.current_shot
+            else (self.current_asset.name if self.current_asset else None)
+        )
+        if item_name:
             QMessageBox.information(
                 self.view,
                 "Open Path",
-                f"Opening file location for: {self.current_shot.name}",
+                f"Opening file location for: {item_name}",
             )
 
     def on_unlock_task(self) -> None:
         """Unlock file / task."""
         QMessageBox.information(self.view, "Unlock", "File and task locks released.")
+
