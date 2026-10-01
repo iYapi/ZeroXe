@@ -96,6 +96,9 @@ class MainView(QMainWindow):
     def on_settings(self):
         if self.settings is None:
             self.settings = SettingsView()
+            self.settings.controller.settings_changed.connect(
+                self.launcher_view.controller.load_initial_data
+            )
 
         if self.settings.isVisible():
             self.settings.hide()

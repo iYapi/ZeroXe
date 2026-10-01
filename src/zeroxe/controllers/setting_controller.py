@@ -5,7 +5,7 @@ and user interactions for SettingsView. Encrypts sensitive credentials locally.
 """
 
 from typing import TYPE_CHECKING, Optional
-from PySide6.QtCore import QObject, QSettings
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from zeroxe import config
@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 class SettingController(QObject):
     """Controls settings logic and bridges SettingsView with QSettings storage."""
+
+    settings_changed = Signal()
+
 
     def __init__(self, view: "SettingsView"):
         super().__init__(view)
@@ -112,11 +115,13 @@ class SettingController(QObject):
     def on_apply(self) -> None:
         """Apply and persist changes."""
         self.save_settings()
+        self.settings_changed.emit()
         QMessageBox.information(self.view, "Settings", "Settings saved successfully.")
 
     def on_ok(self) -> None:
         """Apply changes and close dialog."""
         self.save_settings()
+        self.settings_changed.emit()
         self.view.close()
 
     def on_login_kitsu(self) -> None:
@@ -143,6 +148,7 @@ class SettingController(QObject):
             if success:
                 # Automatically persist settings upon successful login
                 self.save_settings()
+                self.settings_changed.emit()
                 QMessageBox.information(
                     self.view,
                     "Kitsu Login",

@@ -120,6 +120,11 @@ class LauncherController(QObject):
         if self.view.project_model.rowCount() > 0:
             first_idx = self.view.project_model.index(0, 0)
             self.view.ui.listView_project.setCurrentIndex(first_idx)
+        else:
+            self.current_project = None
+            self.view.ui.label_project.setText("Project: None")
+            self.load_categories("")
+            self._clear_item_details()
 
     def load_departments(self) -> None:
         """Fetch departments via DepartmentService and populate department_model."""
@@ -138,6 +143,10 @@ class LauncherController(QObject):
         if self.view.department_model.rowCount() > 0:
             first_idx = self.view.department_model.index(0, 0)
             self.view.ui.listView_department.setCurrentIndex(first_idx)
+        else:
+            self.current_department = None
+            self.view.ui.label_department.setText("Department: None")
+            self.update_metadata_table()
 
     def load_categories(self, project_id: str) -> None:
         """Fetch categories (episodes for Shot mode, asset types for Asset mode) to populate category dropdown."""
@@ -145,24 +154,28 @@ class LauncherController(QObject):
         self.view.ui.comboBox_category.clear()
 
         category_items = ["None"]
-        if self.is_shot_mode:
-            try:
-                self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
-            except Exception as e:
-                logger.error(f"Failed to fetch episodes for project {project_id}: {e}")
-                self.current_episodes = []
+        if project_id:
+            if self.is_shot_mode:
+                try:
+                    self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
+                except Exception as e:
+                    logger.error(f"Failed to fetch episodes for project {project_id}: {e}")
+                    self.current_episodes = []
 
-            if self.current_episodes:
-                category_items.extend([ep.name for ep in self.current_episodes if ep.name])
+                if self.current_episodes:
+                    category_items.extend([ep.name for ep in self.current_episodes if ep.name])
+            else:
+                try:
+                    self.current_asset_types = AssetService.get_asset_types_by_project_id(project_id)
+                except Exception as e:
+                    logger.error(f"Failed to fetch asset types for project {project_id}: {e}")
+                    self.current_asset_types = []
+
+                if self.current_asset_types:
+                    category_items.extend([at.name for at in self.current_asset_types if at.name])
         else:
-            try:
-                self.current_asset_types = AssetService.get_asset_types_by_project_id(project_id)
-            except Exception as e:
-                logger.error(f"Failed to fetch asset types for project {project_id}: {e}")
-                self.current_asset_types = []
-
-            if self.current_asset_types:
-                category_items.extend([at.name for at in self.current_asset_types if at.name])
+            self.current_episodes = []
+            self.current_asset_types = []
 
         self.view.ui.comboBox_category.addItems(category_items)
         self.view.ui.comboBox_category.setCurrentIndex(0)

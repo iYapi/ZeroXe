@@ -5,8 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/asset_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/asset_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/api/gazu_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/api/gazu_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/department_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/department_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/project_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/project_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -188,7 +189,7 @@
       <workItem from="1790663861187" duration="9216000" />
       <workItem from="1790733613541" duration="1988000" />
       <workItem from="1790740507902" duration="16250000" />
-      <workItem from="1790820377030" duration="7142000" />
+      <workItem from="1790820377030" duration="7790000" />
     </task>
     <servers />
   </component>
