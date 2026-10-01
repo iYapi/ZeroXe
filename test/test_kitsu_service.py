@@ -2,9 +2,11 @@ import os
 import gazu
 
 from zeroxe.api.gazu_client import init_kitsu
+from zeroxe.services import asset_service
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.department_service import DepartmentService
 from zeroxe.services.shot_service import ShotService
+from zeroxe.services.asset_service import AssetService
 
 PRINTOUT = True
 
@@ -18,6 +20,7 @@ gazu.log_in(kitsu_email, kitsu_password)
 project_service = ProjectService()
 department_service = DepartmentService()
 shot_service = ShotService()
+asset_service = AssetService()
 
 # Project
 def test_get_all_projects() -> None:
@@ -66,3 +69,14 @@ def test_get_assets_for_shot() -> None:
     assets = gazu.asset.all_assets_for_shot("cdd16d87-0608-4b8b-b05c-8d4e570a90c5")
     if PRINTOUT:
         print(assets)
+
+# Asset
+def test_get_assets_by_project_id() -> None:
+    assets = asset_service.get_assets_by_project_id("0f029a6d-603e-4d6d-8217-902e2e32f274")
+    if PRINTOUT:
+        print(assets)
+
+def test_get_asset_types_by_project_id() -> None:
+    asset_types = asset_service.get_asset_types_by_project_id("0f029a6d-603e-4d6d-8217-902e2e32f274")
+    if PRINTOUT:
+        print(asset_types)
