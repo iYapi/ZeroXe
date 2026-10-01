@@ -227,8 +227,10 @@ class LauncherController(QObject):
 
         assets: List[Asset] = []
         try:
-            all_assets = AssetService.get_assets_by_project_id(self.current_project.id)
-            assets = [a for a in all_assets if a.asset_type == selected_category]
+            assets = AssetService.get_assets_by_type(
+                self.current_project.id,
+                asset_type_name=selected_category,
+            )
         except Exception as e:
             logger.error(f"Failed to fetch assets: {e}")
 
