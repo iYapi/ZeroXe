@@ -1,0 +1,147 @@
+global:
+    kitsu_id: ""
+    name: "Melangkah Dari Timur"
+    code: "MDT"
+    mounts:
+        linux: "/mnt/I/20260222_melangkah_dari_timur/"
+        windows: "I:/20260222_melangkah_dari_timur/"
+        darwin: "/Volumes/I/20260222_melangkah_dari_timur/"
+
+departments:
+    2D:
+        kitsu_id: ""
+        code: "anc"
+        source: ""
+        based: "shot"
+        base_path: "@project_path@/01_pre_production/01_animatic/"
+    Animation:
+        kitsu_id: ""
+        code: "anm"
+        source: "Layout"
+        based: "shot"
+        base_path: "@project_path@/02_production/04_animation/"
+        scripts:
+            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
+            up_master: "@project_path@/00_tools/01_preset_script/mdt_preset_bake_animation.py"
+    Asset:
+        kitsu_id: ""
+        code: ""
+        based: "asset"
+        scripts:
+            up_master: "@project_path@/00_tools/01_preset_script/mdt_preset_texture_asset.py"
+    Blocking:
+        kitsu_id: ""
+        code: "blk"
+        source: "Layout"
+        based: "shot"
+        base_path: "@project_path@/02_production/03_blocking/"
+        scripts:
+            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
+    Compositing:
+        kitsu_id: ""
+        code: "comp"
+        source: "Lighting"
+        based: "shot"
+        base_path: "@project_path@/03_post_production/02_compositing/"
+        scripts:
+            preset: "@project_path@/00_tools/01_preset_script/mdt_preset_comp.py"
+    Editing:
+        kitsu_id: ""
+        code: "edit"
+        source: ""
+        based: "shot"
+        base_path: "@project_path@/03_post_production/04_editing/04_projects/"
+        scripts:
+    FX:
+        kitsu_id: ""
+        code: "fx"
+        source: "Animation"
+        based: "shot"
+        base_path: "@project_path@/03_post_production/03_vfx/"
+    IT:
+        kitsu_id: ""
+        code: ""
+        source: ""
+        based: "shot"
+        base_path: ""
+        scripts:
+    Layout:
+        kitsu_id: ""
+        code: "lay"
+        source: "init"
+        based: "shot"
+        base_path: "@project_path@/02_production/02_layout/"
+        scripts:
+            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
+    Lighting:
+        kitsu_id: ""
+        code: "lgt"
+        source: "Animation"
+        based: "shot"
+        base_path: "@project_path@/03_post_production/01_lighting/"
+        scripts:
+            preset: "@project_path@/00_tools/01_preset_script/mdt_preset_lgt.py"
+    LookDev:
+        kitsu_id: ""
+        code: ""
+        source: ""
+        based: "shot"
+        base_path: ""
+        scripts:
+    Reference:
+        kitsu_id: ""
+        code: ""
+        source: ""
+        based: "shot"
+        base_path: ""
+        scripts:
+asset_type:
+    CHAR:
+        kitsu_id: "3810b978-8a0f-46d7-8ac9-51243507fc3a"
+        code: "chr"
+        prefix: "c-"
+        suffix: ""
+        base_path: "@project_path@/02_production/01_asset/01_char/"
+    PROPS:
+        kitsu_id: "4f34e37a-a6a3-4571-857f-212434f82e3a"
+        code: "prp"
+        prefix: "p-"
+        suffix: ""
+        base_path: "@project_path@/02_production/01_asset/02_prop/"
+    SET:
+        kitsu_id: "44b7cabe-af80-4784-bb32-5c3cf7b05f4a"
+        code: "set"
+        prefix: "s-"
+        suffix: ""
+        base_path: "@project_path@/02_production/01_asset/03_set/"
+    VEHICLE:
+        kitsu_id: "5a1b1c9f-12f2-493a-91af-dbc6fcfe9461"
+        code: "vhc"
+        prefix: "v-"
+        suffix: ""
+        base_path: "@project_path@/02_production/01_asset/04_vehicle/"
+    MS_COMP:
+        kitsu_id: "a1a995f9-f79b-431c-b9e0-60b6a5df502a"
+        code: "ms"
+        prefix: "COMP_"
+        suffix: ""
+        base_path: "@project_path@/03_post_production/02_compositing/00_preset_comp/"
+    MS_LIT:
+        kitsu_id: "02162388-a89d-47d0-a003-41ebdd803d6f"
+        code: "ms"
+        prefix: "LIT_"
+        suffix: ""
+        base_path: "@project_path@/03_post_production/01_lighting/00_preset_lighting/"
+master_shot:
+    master_shot_compositing:
+        code: "ms-comp"
+        base_path: "@project_path@/03_post_production/02_compositing/00_preset_comp/"
+    master_shot_lit:
+        code: "ms-lit"
+        base_path: "@project_path@/03_post_production/01_lighting/00_preset_lighting/"
+library:
+    Animation:
+        code: "anim_lib"
+        prefix: "lib-"
+        suffix: ""
+        base_path: "@project_path@/02_production/04_animation/00_anim_library/"

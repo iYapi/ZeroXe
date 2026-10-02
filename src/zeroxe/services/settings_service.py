@@ -60,7 +60,7 @@ class SettingsService:
 
     @classmethod
     def get_version_folder(cls) -> str:
-        return cls._settings().value("nas/version_folder", "_version", type=str)
+        return cls._settings().value("nas/version_folder", "progress", type=str)
 
     @classmethod
     def set_version_folder(cls, folder: str) -> None:

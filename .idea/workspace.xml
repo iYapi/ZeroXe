@@ -6,11 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/zeroxe/services/settings_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/settings_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/settings_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/settings_view.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ui/nas_setting.ui" beforeDir="false" afterPath="$PROJECT_DIR$/ui/nas_setting.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -198,7 +195,7 @@
       <workItem from="1790820377030" duration="8719000" />
       <workItem from="1790907939455" duration="4113000" />
       <workItem from="1790924430070" duration="1242000" />
-      <workItem from="1790925689157" duration="393000" />
+      <workItem from="1790925689157" duration="2009000" />
     </task>
     <servers />
   </component>

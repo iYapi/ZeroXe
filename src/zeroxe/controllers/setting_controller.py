@@ -85,7 +85,7 @@ class SettingController(QObject):
 
         # 3. NAS Configuration
         zeroxe_map_path = self.settings.value("nas/zeroxe_map_path", "", type=str)
-        version_folder = self.settings.value("nas/version_folder", "", type=str)
+        version_folder = self.settings.value("nas/version_folder", "progress", type=str)
         self.view.nas_ui.lineEdit_zeroxeMap.setText(zeroxe_map_path)
         self.view.nas_ui.lineEdit_versionFolder.setText(version_folder)
 
