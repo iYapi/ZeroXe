@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JsonSchemaMappingsProjectConfiguration">
+    <state>
+      <map>
+        <entry key="Erda Pipeline">
+          <value>
+            <SchemaInfo>
+              <option name="name" value="Erda Pipeline" />
+              <option name="relativePathToSchema" value="https://raw.githubusercontent.com/erda-project/erda/master/.erda/schemas/pipeline.yaml.json" />
+              <option name="applicationDefined" value="true" />
+              <option name="patterns">
+                <list>
+                  <Item>
+                    <option name="path" value="file:///mnt/I/20260222_melangkah_dari_timur/00_tools/00_pipeline/pipeline.yaml" />
+                  </Item>
+                </list>
+              </option>
+            </SchemaInfo>
+          </value>
+        </entry>
+      </map>
+    </state>
+  </component>
+</project>

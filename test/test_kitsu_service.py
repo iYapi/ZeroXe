@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import gazu
 
 from zeroxe.api.gazu_client import init_kitsu
@@ -7,6 +8,20 @@ from zeroxe.services.project_service import ProjectService
 from zeroxe.services.department_service import DepartmentService
 from zeroxe.services.shot_service import ShotService
 from zeroxe.services.asset_service import AssetService
+
+# Auto-load .env file from project root if it exists
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_file)
+    except ImportError:
+        with open(_env_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
 
 PRINTOUT = True
 
