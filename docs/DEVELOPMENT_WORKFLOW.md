@@ -187,6 +187,17 @@ self.ui.lineEdit_search.textChanged.connect(self.proxy_model.setFilterFixedStrin
 ```bash
 # Run application
 python -m zeroxe.main
+# Or via uv
+uv run zeroxe
+
+# Run automated tests
+pytest
+
+# Run specific path generator test
+python test/test_shot_path.py
+
+# Test Pipeline CLI endpoint directly
+python -m pipeline.Commands.main shot-path --dept Layout --ep ep998 --sq sq01 --sh sh0020 --json
 
 # Compile all UI files
 python scripts/compile_ui.py
@@ -206,10 +217,29 @@ python scripts/build_executable.py --onedir
 
 ---
 
-### 4. Linux GLIBC & AppImage Compatibility Rule
+### 4. Testing & Environment Configuration (`.env`)
+
+For headless test scripts (e.g. `test/test_kitsu_service.py`):
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Configure your local test credentials:
+   ```env
+   KITSU_HOST=http://192.168.99.38:8080/api
+   KITSU_EVENT_HOST=http://192.168.99.38:8080
+   KITSU_EMAIL=user@example.com
+   KITSU_PASSWORD=your_password
+   ```
+3. Test files will automatically load `.env` at runtime.
+
+---
+
+### 5. Linux GLIBC & AppImage Compatibility Rule
 > [!IMPORTANT]
 > Linux shared libraries (GLIBC) are backward-compatible, but **not forward-compatible**.
 > If you build an AppImage directly on a cutting-edge host system (e.g. Arch Linux / Fedora with GLIBC 2.44), the generated AppImage will fail on older distributions (Ubuntu 22.04/24.04, Debian 12) with:
 > `ImportError: /lib64/libm.so.6: version 'GLIBC_2.44' not found`
 >
 > **Solution**: Always use `./scripts/build_appimage_docker.sh` to package production AppImages against an Ubuntu 22.04 LTS (GLIBC 2.35) baseline so it runs across all Linux distributions.
+

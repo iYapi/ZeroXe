@@ -48,21 +48,31 @@ graph TD
 ZeroXe/
 ├── assets/                    # Icons, stylesheets (.qss), static media
 ├── docs/                      # Developer documentation and guides
+├── pipeline/                  # Modular Pipeline Core & Path Generation
+│   ├── pipeline.yaml          # Project pipeline configuration
+│   ├── Commands/
+│   │   ├── main.py            # Modular entrypoint (Python API & CLI)
+│   │   ├── Paths/             # Path generation and pattern resolvers
+│   │   │   └── shot_path_generator.py
+│   │   └── Builders/          # Builder routines for DCCs (Blender, etc.)
+│   └── Presets/               # Pipeline presets
 ├── scripts/                   # Build, compilation, and packaging scripts
 │   ├── compile_ui.py          # Auto-compiles ui/*.ui to src/zeroxe/ui/ui_*.py
 │   ├── build_executable.py    # Standalone PyInstaller packager
 │   └── build_appimage.sh      # Linux AppImage builder
+├── test/                      # Test suite (pytest / headless scripts)
 ├── ui/                        # Qt Designer source files (*.ui, *.qrc)
 │   ├── launcher.ui
 │   ├── settings.ui
 │   ├── kitsu_setting.ui
-│   └── software_setting.ui
+│   ├── software_setting.ui
+│   └── nas_setting.ui
 └── src/
     └── zeroxe/
         ├── api/               # External API integrations (Gazu, Kitsu, HTTP APIs)
-        ├── controllers/       # UI flow mediators & event handlers (SettingController)
+        ├── controllers/       # UI flow mediators & event handlers (SettingController, LauncherController)
         ├── models/            # Pure data classes / schemas / domain entities
-        ├── services/          # Business logic, data processing, background workers
+        ├── services/          # Business logic (SettingsService, PipelineService, ProjectService)
         ├── ui/                # Generated PySide6 Python UI files (DO NOT EDIT)
         ├── utils/             # Helper utilities (security/encryption, paths)
         ├── views/             # Custom QWidget / QMainWindow classes (View logic)
@@ -255,7 +265,57 @@ ZeroXe avoids storing raw plain-text credentials in config files or the Windows 
 
 ---
 
-## 5. Summary Cheat Sheet
+## 5. Pipeline Architecture & Modular Path Resolution (`pipeline/`)
+
+The pipeline system operates as an independent, modular package that can be imported directly into Python or invoked via CLI.
+
+> [!NOTE]
+> The `pipeline/` folder in the repository serves as a **local development example and fallback reference**. In production, the active `pipeline.yaml` and pipeline scripts reside directly on the **NAS** (e.g. `/mnt/I/<project>/00_pipeline/pipeline.yaml`), dynamically located by `zeroxe_map.yaml` configured in the app's NAS settings.
+
+### Path Patterns & Placeholders
+- **Base mount resolution**: Replaces `@project_path@` with OS-specific mount paths (`global.mounts[platform]`).
+- **Master Shot Path**:
+  `{mount}/{dept_base}/{ep}/{ep}_{sq}/{ep}_{sq}_{sh}/{project_code}_{ep}_{sq}_{sh}_{dept_code}.blend`
+- **Version Shot Path**:
+  `{mount}/{dept_base}/{ep}/{ep}_{sq}/{ep}_{sq}_{sh}/{version_folder}/{project_code}_{ep}_{sq}_{sh}_{dept_code}_v001.blend`
+
+### Calling the Pipeline
+1. **Via Python API**:
+   ```python
+   from pipeline.Commands.main import resolve_shot_paths
+
+   result = resolve_shot_paths(
+       department="Layout",
+       episode="ep998",
+       sequence="sq01",
+       shot="sh0020",
+       version_number=1,
+       version_folder="progress",
+   )
+   print(result.master_path)
+   print(result.version_path)
+   ```
+
+2. **Via Qt `PipelineService`**:
+   ```python
+   from zeroxe.services.pipeline_service import PipelineService
+
+   result = PipelineService.resolve_shot(
+       department="Layout",
+       episode="ep998",
+       sequence="sq01",
+       shot="sh0020",
+   )
+   ```
+
+3. **Via CLI**:
+   ```bash
+   python -m pipeline.Commands.main shot-path --dept Layout --ep ep998 --sq sq01 --sh sh0020 --json
+   ```
+
+---
+
+## 6. Summary Cheat Sheet
 
 | Component | Responsibility | Where it lives |
 | :--- | :--- | :--- |
@@ -264,6 +324,8 @@ ZeroXe avoids storing raw plain-text credentials in config files or the Windows 
 | **View** | Custom `QWidget`, tab/stack assembly, Qt Item Models | `src/zeroxe/views/` |
 | **Controller** | Event handling, dialogs, form validation, service calls | `src/zeroxe/controllers/` |
 | **Service** | API requests, launching software, persistent I/O | `src/zeroxe/services/` |
+| **Pipeline Core** | Pattern-based path resolution and DCC command dispatcher | `pipeline/Commands/` |
 | **Security** | Machine-bound credential encryption/decryption | `src/zeroxe/utils/security.py` |
 | **Model** | Data structures, type hints, dataclasses | `src/zeroxe/models/` |
 | **Main Window** | Container window, menu bar, tabs | `src/zeroxe/views/main_view.py` |
+
