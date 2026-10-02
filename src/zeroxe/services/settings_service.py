@@ -58,6 +58,8 @@ class SettingsService:
         cls._settings().setValue("nas/zeroxe_map_path", path)
         cls._settings().sync()
 
+
+
     @classmethod
     def get_version_folder(cls) -> str:
         return cls._settings().value("nas/version_folder", "progress", type=str)

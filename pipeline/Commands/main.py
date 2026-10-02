@@ -10,16 +10,44 @@ from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+# Ensure sibling directories (Paths, Builders) and pipeline root can be resolved
+_current_dir = Path(__file__).resolve().parent
+_pipeline_root = _current_dir.parent
 
-# Default pipeline configuration location (relative to project)
-DEFAULT_PIPELINE_YAML = Path(__file__).resolve().parent.parent / "pipeline.yaml"
+for _p in [str(_pipeline_root), str(_current_dir)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+except ImportError:
+    try:
+        from Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+    except ImportError:
+        try:
+            from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+        except ImportError:
+            from .Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+
+# Default pipeline configuration location (relative to this Commands folder)
+DEFAULT_PIPELINE_YAML = _pipeline_root / "pipeline.yaml"
+
+_GENERATOR_CACHE: Dict[str, ShotPathGenerator] = {}
 
 
 def get_generator(config_path: Optional[Union[str, Path]] = None) -> ShotPathGenerator:
-    """Create ShotPathGenerator initialized with pipeline.yaml."""
+    """Create or return cached ShotPathGenerator initialized with pipeline.yaml."""
     cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
-    return ShotPathGenerator(config=cfg)
+    key = str(cfg.resolve())
+    if key not in _GENERATOR_CACHE:
+        _GENERATOR_CACHE[key] = ShotPathGenerator(config=cfg)
+    return _GENERATOR_CACHE[key]
+
+
+def clear_generator_cache() -> None:
+    """Clear in-memory generator and config caches."""
+    _GENERATOR_CACHE.clear()
+
 
 
 def resolve_shot_paths(

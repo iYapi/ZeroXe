@@ -280,23 +280,8 @@ The pipeline system operates as an independent, modular package that can be impo
   `{mount}/{dept_base}/{ep}/{ep}_{sq}/{ep}_{sq}_{sh}/{version_folder}/{project_code}_{ep}_{sq}_{sh}_{dept_code}_v001.blend`
 
 ### Calling the Pipeline
-1. **Via Python API**:
-   ```python
-   from pipeline.Commands.main import resolve_shot_paths
-
-   result = resolve_shot_paths(
-       department="Layout",
-       episode="ep998",
-       sequence="sq01",
-       shot="sh0020",
-       version_number=1,
-       version_folder="progress",
-   )
-   print(result.master_path)
-   print(result.version_path)
-   ```
-
-2. **Via Qt `PipelineService`**:
+1. **Via Qt `PipelineService` (Recommended within Desktop App)**:
+   Dynamically loads the active pipeline from NAS (`zeroxe_map.yaml`) or local fallback without requiring static package imports:
    ```python
    from zeroxe.services.pipeline_service import PipelineService
 
@@ -305,13 +290,17 @@ The pipeline system operates as an independent, modular package that can be impo
        episode="ep998",
        sequence="sq01",
        shot="sh0020",
+       version_number=1,
    )
+   print(result.master_path)
+   print(result.version_path)
    ```
 
-3. **Via CLI**:
+2. **Via External CLI**:
    ```bash
-   python -m pipeline.Commands.main shot-path --dept Layout --ep ep998 --sq sq01 --sh sh0020 --json
+   python /mnt/I/<project>/00_pipeline/Commands/main.py shot-path --dept Layout --ep ep998 --sq sq01 --sh sh0020 --json
    ```
+
 
 ---
 

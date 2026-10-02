@@ -23,6 +23,7 @@ from zeroxe.models.project_model import Project
 from zeroxe.models.shot_model import Episode, Sequence, Shot
 from zeroxe.services.asset_service import AssetService
 from zeroxe.services.department_service import DepartmentService
+from zeroxe.services.pipeline_service import PipelineService
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.settings_service import SettingsService
 from zeroxe.services.shot_service import ShotService
@@ -48,6 +49,7 @@ class LauncherController(QObject):
         self.current_shot: Optional[Shot] = None
         self.current_asset: Optional[Asset] = None
         self.current_version: str = ""
+        self.selected_file_path: Optional[str] = None
 
         self._bind_signals()
         self.load_initial_data()
@@ -91,6 +93,14 @@ class LauncherController(QObject):
     # ------------------------------------------------------------------
     # Data Loading
     # ------------------------------------------------------------------
+    def on_settings_updated(self) -> None:
+        """Handle live configuration updates from Settings view."""
+        PipelineService.clear_cache()
+        if self.current_shot or self.current_asset:
+            self.refresh_versions()
+        else:
+            self.load_initial_data()
+
     def load_initial_data(self) -> None:
         """Populate initial dropdowns, actions, departments, and project list."""
         # 1. Action Dropdown
@@ -102,6 +112,7 @@ class LauncherController(QObject):
 
         # 3. Load Projects
         self.load_projects()
+
 
     def load_projects(self) -> None:
         """Fetch projects via ProjectService and populate project_model."""
@@ -277,6 +288,7 @@ class LauncherController(QObject):
                 "Frame Range": f"{self.current_shot.frame_in} - {self.current_shot.frame_out}",
                 "Assets Linked": len(self.current_shot.assets),
                 "Version": self.current_version or "None",
+                "Selected File": self.selected_file_path or "None",
             }
         elif self.current_asset:
             proj_name = self.current_project.name if self.current_project else "None"
@@ -286,6 +298,7 @@ class LauncherController(QObject):
                 "Department": dept_name,
                 "Project": proj_name,
                 "Version": self.current_version or "None",
+                "Selected File": self.selected_file_path or "None",
             }
         else:
             return
@@ -300,6 +313,7 @@ class LauncherController(QObject):
         self.current_shot = None
         self.current_asset = None
         self.current_version = ""
+        self.selected_file_path = None
         self.view.version_model.clear()
         self.view.metadata_model.removeRows(0, self.view.metadata_model.rowCount())
         self.view.ui.label_title.setText("No item selected")
@@ -325,7 +339,12 @@ class LauncherController(QObject):
         self.current_department = current.data(Qt.ItemDataRole.UserRole)
         dept_name = self.current_department.name if self.current_department else ""
         self.view.ui.label_department.setText(f"Department: {dept_name}")
-        self.update_metadata_table()
+
+        # Refresh version list for newly selected department if item is active
+        if self.current_shot or self.current_asset:
+            self.refresh_versions()
+        else:
+            self.update_metadata_table()
 
     def on_type_toggled(self, button) -> None:
         """Handle Shot vs Asset toggle."""
@@ -358,47 +377,98 @@ class LauncherController(QObject):
             self._clear_item_details()
             return
 
-        # Populate versions placeholder / list
-        self.view.version_model.clear()
-        for v_name in ["v001", "v002", "v003"]:
-            self.view.version_model.appendRow(QStandardItem(v_name))
+        self.refresh_versions()
 
-        if self.view.version_model.rowCount() > 0:
-            first_v_idx = self.view.version_model.index(0, 0)
-            self.view.ui.listView_version.setCurrentIndex(first_v_idx)
+    def refresh_versions(self) -> None:
+        """Scan pipeline versioning files for currently selected item and populate listView_version."""
+        self.view.version_model.clear()
+
+        if self.current_shot:
+            proj_name = self.current_project.name if self.current_project else None
+            dept_name = self.current_department.name if self.current_department else "Layout"
+            ep = self.current_shot.episode or self.view.ui.comboBox_category.currentText()
+            sq = self.current_shot.sequence or ""
+            sh = self.current_shot.name
+
+            try:
+                # 1. Resolve master path via PipelineService
+                shot_path_res = PipelineService.resolve_shot(
+                    department=dept_name,
+                    episode=ep,
+                    sequence=sq,
+                    shot=sh,
+                    project_name=proj_name,
+                )
+
+                # 2. Master is ALWAYS on top (Row 0)
+                master_item = QStandardItem("Master")
+                master_item.setData(str(shot_path_res.master_path), Qt.ItemDataRole.UserRole)
+                self.view.version_model.appendRow(master_item)
+
+                # 3. Scan existing version files in the version folder (e.g. progress/)
+                existing_versions = PipelineService.list_versions(
+                    department=dept_name,
+                    episode=ep,
+                    sequence=sq,
+                    shot=sh,
+                    project_name=proj_name,
+                )
+
+                for ver_num, ver_path in existing_versions:
+                    ver_item = QStandardItem(f"v{ver_num:03d}")
+                    ver_item.setData(str(ver_path), Qt.ItemDataRole.UserRole)
+                    self.view.version_model.appendRow(ver_item)
+
+            except Exception as e:
+                logger.error(f"Failed to scan versions for shot {sh}: {e}")
+                self.current_version = "Pipeline Error"
+                self.selected_file_path = None
+                self.view.ui.label_version.setText("<font color='#f87171'><b>Pipeline Error</b></font>")
+                self.update_metadata_table()
+                QMessageBox.warning(
+                    self.view,
+                    "Pipeline Not Found",
+                    f"Could not load pipeline for '{sh}':\n\n{e}\n\n"
+                    "Please configure the valid zeroxe_map.yaml path in Settings -> NAS.",
+                )
+                return
+
+        elif self.current_asset:
+            master_item = QStandardItem("Master")
+            master_item.setData(f"{self.current_asset.name}.blend", Qt.ItemDataRole.UserRole)
+            self.view.version_model.appendRow(master_item)
+
+        # 4. Auto-select the latest version by default
+        total_rows = self.view.version_model.rowCount()
+        if total_rows > 1:
+            # Select latest version (last item in list)
+            latest_idx = self.view.version_model.index(total_rows - 1, 0)
+            self.view.ui.listView_version.setCurrentIndex(latest_idx)
+        elif total_rows == 1:
+            # Only Master exists
+            first_idx = self.view.version_model.index(0, 0)
+            self.view.ui.listView_version.setCurrentIndex(first_idx)
+        else:
+            self.current_version = ""
+            self.selected_file_path = None
+            self.view.ui.label_version.setText("No version")
+            self.update_metadata_table()
+
 
     def on_version_selected(self, current, previous) -> None:
         """Handle version selection change."""
         if not current.isValid():
             return
         self.current_version = current.data(Qt.ItemDataRole.DisplayRole)
+        self.selected_file_path = current.data(Qt.ItemDataRole.UserRole)
         self.view.ui.label_version.setText(f"Version: <b>{self.current_version}</b>")
         self.update_metadata_table()
 
     def on_execute_action(self) -> None:
         """Execute selected software action (e.g. Launch Blender or PureRef)."""
         action = self.view.ui.comboBox.currentText()
-        item_name = (
-            self.current_shot.name
-            if self.current_shot
-            else (self.current_asset.name if self.current_asset else "None")
-        )
-
         if "Blender" in action:
-            blender_path = SettingsService.get_active_blender()
-            if not blender_path or not Path(blender_path).exists():
-                QMessageBox.warning(
-                    self.view,
-                    "Blender Not Configured",
-                    "Blender executable path is missing or invalid. Please configure it in Settings.",
-                )
-                return
-            try:
-                subprocess.Popen([blender_path])
-                QMessageBox.information(self.view, "Launched", f"Launching Blender for {item_name}...")
-            except Exception as e:
-                QMessageBox.critical(self.view, "Launch Error", f"Failed to launch Blender: {e}")
-
+            self.on_open_path()
         elif "PureRef" in action:
             pureref_path = SettingsService.get_pureref_path()
             if not pureref_path or not Path(pureref_path).exists():
@@ -412,8 +482,12 @@ class LauncherController(QObject):
                 subprocess.Popen([pureref_path])
             except Exception as e:
                 QMessageBox.critical(self.view, "Launch Error", f"Failed to launch PureRef: {e}")
-
         else:
+            item_name = (
+                self.current_shot.name
+                if self.current_shot
+                else (self.current_asset.name if self.current_asset else "None")
+            )
             QMessageBox.information(
                 self.view,
                 "Execute Action",
@@ -421,20 +495,57 @@ class LauncherController(QObject):
             )
 
     def on_open_path(self) -> None:
-        """Open item file location."""
-        item_name = (
-            self.current_shot.name
-            if self.current_shot
-            else (self.current_asset.name if self.current_asset else None)
-        )
-        if item_name:
-            QMessageBox.information(
+        """Open the currently selected item file using active Blender executable."""
+        active_blender = SettingsService.get_active_blender()
+        if not active_blender or not Path(active_blender).is_file():
+            QMessageBox.warning(
                 self.view,
-                "Open Path",
-                f"Opening file location for: {item_name}",
+                "Blender Not Configured",
+                "Blender executable path is missing or invalid. Please configure it in Settings -> Software.",
             )
+            return
+
+        if not self.selected_file_path or self.current_version == "Pipeline Error":
+            QMessageBox.warning(
+                self.view,
+                "Pipeline / File Error",
+                "Cannot open file because the pipeline could not be loaded or no valid file is selected.\n\n"
+                "Please configure the zeroxe_map path in Settings -> NAS.",
+            )
+            return
+
+        target_file = Path(self.selected_file_path)
+
+        if target_file.is_file():
+            try:
+                subprocess.Popen([active_blender, str(target_file)])
+            except Exception as e:
+                QMessageBox.critical(
+                    self.view,
+                    "Error Opening File",
+                    f"Failed to launch Blender with file:\n\n{target_file}\n\nError: {e}",
+                )
+        else:
+            reply = QMessageBox.question(
+                self.view,
+                "File Does Not Exist",
+                f"The selected file does not exist on disk yet:\n\n{target_file}\n\nDo you want to create the directory and open Blender with this path?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    subprocess.Popen([active_blender, str(target_file)])
+                except Exception as e:
+                    QMessageBox.critical(
+                        self.view,
+                        "Error Opening File",
+                        f"Failed to launch Blender:\n\n{e}",
+                    )
 
     def on_unlock_task(self) -> None:
         """Unlock file / task."""
         QMessageBox.information(self.view, "Unlock", "File and task locks released.")
+
 

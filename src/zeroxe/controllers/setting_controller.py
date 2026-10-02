@@ -124,6 +124,10 @@ class SettingController(QObject):
         self.settings.setValue("nas/version_folder", version_folder)
         self.settings.sync()
 
+        from zeroxe.services.pipeline_service import PipelineService
+        PipelineService.clear_cache()
+
+
     # ------------------------------------------------------------------
     # Action Handlers
     # ------------------------------------------------------------------

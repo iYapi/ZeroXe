@@ -34,6 +34,10 @@ class ShotPathResult:
     version_number: int
 
 
+# Global in-memory cache for parsed YAML configs to avoid redundant disk/NAS reads
+_YAML_CONFIG_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+
+
 class ShotPathGenerator:
     """Generates and resolves pipeline paths for shots."""
 
@@ -51,14 +55,27 @@ class ShotPathGenerator:
             self.load_config(config)
 
     def load_config(self, config_source: Union[Dict[str, Any], str, Path]) -> None:
-        """Load configuration dictionary or from YAML file path."""
+        """Load configuration dictionary or from YAML file path with fast caching."""
         if isinstance(config_source, dict):
             self.config = config_source
         else:
             path = Path(config_source)
             if path.is_file():
-                with open(path, "r", encoding="utf-8") as f:
-                    self.config = yaml.safe_load(f) or {}
+                resolved_key = str(path.resolve())
+                try:
+                    mtime = path.stat().st_mtime
+                    cached = _YAML_CONFIG_CACHE.get(resolved_key)
+                    if cached and cached[0] == mtime:
+                        self.config = cached[1]
+                        return
+
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded = yaml.safe_load(f) or {}
+                        _YAML_CONFIG_CACHE[resolved_key] = (mtime, loaded)
+                        self.config = loaded
+                except Exception:
+                    with open(path, "r", encoding="utf-8") as f:
+                        self.config = yaml.safe_load(f) or {}
             else:
                 self.config = {}
 
@@ -84,22 +101,45 @@ class ShotPathGenerator:
         return str(global_cfg.get("code", "")).lower()
 
     def get_department_info(self, department_name_or_code: str) -> Tuple[str, Dict[str, Any]]:
-        """Look up department configuration by name or short code."""
+        """Look up department configuration by name or short code with flexible matching."""
         departments = self.config.get("departments", {})
+        if not departments:
+            return department_name_or_code, {}
 
-        # Direct name match (e.g., 'Layout')
+        # 1. Direct name match (e.g. 'Layout')
         if department_name_or_code in departments:
             return department_name_or_code, departments[department_name_or_code]
 
-        # Case-insensitive / code match
-        target_lower = department_name_or_code.lower()
+        # 2. Case-insensitive and normalized match (e.g. 'layout', '3d layout', 'lay')
+        target_lower = department_name_or_code.lower().strip()
+        target_clean = target_lower.replace(" ", "").replace("_", "")
+
         for dept_name, info in departments.items():
-            if dept_name.lower() == target_lower:
-                return dept_name, info
-            if info.get("code", "").lower() == target_lower:
+            dept_lower = dept_name.lower().strip()
+            dept_clean = dept_lower.replace(" ", "").replace("_", "")
+            code_lower = str(info.get("code", "")).lower().strip()
+            code_clean = code_lower.replace(" ", "").replace("_", "")
+
+            if (
+                dept_lower == target_lower
+                or dept_clean == target_clean
+                or code_lower == target_lower
+                or code_clean == target_clean
+            ):
                 return dept_name, info
 
-        return department_name_or_code, {}
+        # 3. Substring matching (e.g. '3D Layout' contains 'layout')
+        for dept_name, info in departments.items():
+            dept_lower = dept_name.lower().strip()
+            code_lower = str(info.get("code", "")).lower().strip()
+            if (dept_lower and (dept_lower in target_lower or target_lower in dept_lower)) or (
+                code_lower and (code_lower in target_lower or target_lower in code_lower)
+            ):
+                return dept_name, info
+
+        # 4. Fallback to first configured department
+        first_key = next(iter(departments.keys()))
+        return first_key, departments[first_key]
 
     def resolve_base_path(self, raw_path: str, project_path: Optional[str] = None) -> str:
         """Replace @project_path@ placeholder with actual mount path."""
@@ -209,6 +249,9 @@ class ShotPathGenerator:
         Returns list of (version_number, file_path) tuples.
         """
         ext = extension or self.default_extension
+        if not ext.startswith("."):
+            ext = f".{ext}"
+
         res = self.generate_shot_paths(
             department=department,
             episode=episode,
@@ -219,22 +262,47 @@ class ShotPathGenerator:
             extension=ext,
         )
 
-        version_dir = res.version_dir
-        if not version_dir.is_dir():
+        search_dirs: List[Path] = []
+        if res.version_dir.is_dir():
+            search_dirs.append(res.version_dir)
+        if res.shot_dir.is_dir() and res.shot_dir != res.version_dir:
+            search_dirs.append(res.shot_dir)
+
+        if not search_dirs:
             return []
 
         versions: List[Tuple[int, Path]] = []
-        pattern = re.compile(rf"{re.escape(res.file_name.replace(ext, ''))}_v(\d+){re.escape(ext)}$")
+        seen_numbers = set()
 
-        for f in version_dir.iterdir():
-            if f.is_file():
-                match = pattern.search(f.name)
-                if match:
-                    ver_num = int(match.group(1))
-                    versions.append((ver_num, f))
+        # Compile matching regexes
+        base_no_ext = res.file_name[:-len(ext)] if res.file_name.lower().endswith(ext.lower()) else res.file_name
+        specific_pattern = re.compile(rf"^{re.escape(base_no_ext)}_v(\d+){re.escape(ext)}$", re.IGNORECASE)
+        generic_pattern = re.compile(rf"(?:^|[_.\-])[vV](\d+){re.escape(ext)}$", re.IGNORECASE)
+
+        for d in search_dirs:
+            for f in d.iterdir():
+                if f.is_file() and f.name.lower().endswith(ext.lower()):
+                    # Avoid adding master file as a version if it happens to match
+                    if f.resolve() == res.master_path.resolve():
+                        continue
+
+                    # Try specific pattern first
+                    m = specific_pattern.search(f.name)
+                    if not m:
+                        m = generic_pattern.search(f.name)
+
+                    if m:
+                        try:
+                            ver_num = int(m.group(1))
+                            if ver_num not in seen_numbers:
+                                seen_numbers.add(ver_num)
+                                versions.append((ver_num, f))
+                        except ValueError:
+                            continue
 
         versions.sort(key=lambda x: x[0])
         return versions
+
 
     def get_next_version_number(
         self,
