@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from zeroxe.ui.ui_settings import Ui_Form
 from zeroxe.ui.ui_kitsu_setting import Ui_Form as KitsuSettingUi
 from zeroxe.ui.ui_software_setting import Ui_Form as SoftwareSettingUi
+from zeroxe.ui.ui_nas_setting import Ui_Form as NasSettingUi
 from zeroxe.controllers.setting_controller import SettingController
 
 
@@ -25,6 +26,7 @@ class SettingsView(QWidget):
 
         self.ui.listWidget_menu.addItem("Kitsu")
         self.ui.listWidget_menu.addItem("Software")
+        self.ui.listWidget_menu.addItem("NAS")
 
         self.kitsu_widget = QWidget()
         self.kitsu_ui = KitsuSettingUi()
@@ -34,9 +36,14 @@ class SettingsView(QWidget):
         self.software_ui = SoftwareSettingUi()
         self.software_ui.setupUi(self.software_widget)
 
+        self.nas_widget = QWidget()
+        self.nas_ui = NasSettingUi()
+        self.nas_ui.setupUi(self.nas_widget)
+
         self.stack = QStackedWidget()
         self.stack.addWidget(self.kitsu_widget)  # Index 0
         self.stack.addWidget(self.software_widget)  # Index 1
+        self.stack.addWidget(self.nas_widget)  # Index 2
 
         self.ui.verticalLayout.addWidget(self.stack)
 

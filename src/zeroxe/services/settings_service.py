@@ -45,3 +45,45 @@ class SettingsService:
     @classmethod
     def get_pureref_path(cls) -> str:
         return cls._settings().value("software/pureref_path", "", type=str)
+
+    # ------------------------------------------------------------------
+    # NAS Configuration
+    # ------------------------------------------------------------------
+    @classmethod
+    def get_zeroxe_map_path(cls) -> str:
+        return cls._settings().value("nas/zeroxe_map_path", "", type=str)
+
+    @classmethod
+    def set_zeroxe_map_path(cls, path: str) -> None:
+        cls._settings().setValue("nas/zeroxe_map_path", path)
+        cls._settings().sync()
+
+    @classmethod
+    def get_version_folder(cls) -> str:
+        return cls._settings().value("nas/version_folder", "_version", type=str)
+
+    @classmethod
+    def set_version_folder(cls, folder: str) -> None:
+        cls._settings().setValue("nas/version_folder", folder)
+        cls._settings().sync()
+
+    @classmethod
+    def get_zeroxe_map(cls) -> dict:
+        """Load and parse the YAML file from zeroxe_map_path."""
+        map_path = cls.get_zeroxe_map_path()
+        if not map_path:
+            return {}
+        try:
+            import yaml
+            from pathlib import Path
+
+            path = Path(map_path)
+            if path.is_file():
+                with open(path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).error(f"Failed to load zeroxe map from {map_path}: {e}")
+        return {}
+

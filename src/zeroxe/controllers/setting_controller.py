@@ -47,6 +47,9 @@ class SettingController(QObject):
         # Software Settings - PureRef
         sw_ui.pushButton_locatePureref.clicked.connect(self.on_locate_pureref)
 
+        # NAS Settings
+        self.view.nas_ui.toolButton_locateMap.clicked.connect(self.on_locate_zeroxe_map)
+
         # Kitsu Login
         self.view.kitsu_ui.pushButton_login.clicked.connect(self.on_login_kitsu)
 
@@ -80,6 +83,12 @@ class SettingController(QObject):
         self.view.software_ui.lineEdit_selectedBlender.setText(active_blender)
         self.view.software_ui.lineEdit_pureref.setText(pureref_path)
 
+        # 3. NAS Configuration
+        zeroxe_map_path = self.settings.value("nas/zeroxe_map_path", "", type=str)
+        version_folder = self.settings.value("nas/version_folder", "", type=str)
+        self.view.nas_ui.lineEdit_zeroxeMap.setText(zeroxe_map_path)
+        self.view.nas_ui.lineEdit_versionFolder.setText(version_folder)
+
     def save_settings(self) -> None:
         """Persist current UI inputs to QSettings with encrypted password."""
         # 1. Save Kitsu
@@ -107,6 +116,12 @@ class SettingController(QObject):
         self.settings.setValue("software/blender_paths", blender_items)
         self.settings.setValue("software/active_blender", active_blender)
         self.settings.setValue("software/pureref_path", pureref_path)
+
+        # 3. Save NAS Configuration
+        zeroxe_map_path = self.view.nas_ui.lineEdit_zeroxeMap.text().strip()
+        version_folder = self.view.nas_ui.lineEdit_versionFolder.text().strip()
+        self.settings.setValue("nas/zeroxe_map_path", zeroxe_map_path)
+        self.settings.setValue("nas/version_folder", version_folder)
         self.settings.sync()
 
     # ------------------------------------------------------------------
@@ -210,3 +225,15 @@ class SettingController(QObject):
         )
         if file_path:
             self.view.software_ui.lineEdit_pureref.setText(file_path)
+
+    def on_locate_zeroxe_map(self) -> None:
+        """Open file dialog to locate zeroxe_map.yaml file."""
+        current_path = self.view.nas_ui.lineEdit_zeroxeMap.text().strip()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.view,
+            "Locate Zeroxe Map",
+            current_path or "",
+            "YAML Files (*.yaml *.yml);;All Files (*)",
+        )
+        if file_path:
+            self.view.nas_ui.lineEdit_zeroxeMap.setText(file_path)
