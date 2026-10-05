@@ -16,3 +16,11 @@ Welcome to the **ZeroXe** project documentation.
    - Qt Designer & `compile_ui.py` workflow
    - Qt Model/View & Search Proxy best practices
    - Useful CLI and build commands
+
+3. **[File Locking & Version History System](file:///home/iyapi/Documents/Project/2026/remake/ZeroXe/docs/LOCK_AND_VERSION_SYSTEM.md)**
+   - Cooperative application-level locks in `00_pipeline/locks/`
+   - Chronological audit logs in `00_pipeline/history/`
+   - Kitsu ID & artist identity tracking
+   - Process monitoring & auto-unlock on DCC exit
+   - Force unlock mechanism & CLI reference
+

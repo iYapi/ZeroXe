@@ -106,6 +106,8 @@ Detailed architectural and workflow guides are available in the [`docs/`](docs/)
 
 1. **[Architecture Guide](docs/ARCHITECTURE_GUIDE.md)**: Detailed MVC layers, security encryption, and pipeline design.
 2. **[Development Workflow & Cookbook](docs/DEVELOPMENT_WORKFLOW.md)**: Step-by-step UI creation guide, compiler usage, and AppImage building.
+3. **[File Locking & Version History System](docs/LOCK_AND_VERSION_SYSTEM.md)**: Cooperative application locks, Kitsu identity tracking, and audit trails.
+
 
 ---
 
