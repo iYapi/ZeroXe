@@ -536,9 +536,52 @@ class LauncherController(QObject):
                 return
 
         elif self.current_asset:
-            master_item = QStandardItem("Master")
-            master_item.setData(f"{self.current_asset.name}.blend", Qt.ItemDataRole.UserRole)
-            self.view.version_model.appendRow(master_item)
+            proj_name = self.current_project.name if self.current_project else None
+            dept_name = self.current_department.name if self.current_department else ""
+            at_type = self.current_asset.asset_type or self.view.ui.comboBox_category.currentText()
+            asset_name = self.current_asset.name
+
+            try:
+                # 1. Resolve master path via PipelineService
+                asset_path_res = PipelineService.resolve_asset(
+                    asset_type=at_type,
+                    asset_name=asset_name,
+                    department=dept_name,
+                    project_name=proj_name,
+                )
+
+                # 2. Master is ALWAYS on top (Row 0)
+                master_item = QStandardItem("Master")
+                master_item.setData(str(asset_path_res.master_path), Qt.ItemDataRole.UserRole)
+                self.view.version_model.appendRow(master_item)
+
+                # 3. Scan existing version files in the version folder (e.g. progress/)
+                existing_versions = PipelineService.list_asset_versions(
+                    asset_type=at_type,
+                    asset_name=asset_name,
+                    department=dept_name,
+                    project_name=proj_name,
+                )
+
+                for ver_num, ver_path in existing_versions:
+                    ver_item = QStandardItem(f"v{ver_num:03d}")
+                    ver_item.setData(str(ver_path), Qt.ItemDataRole.UserRole)
+                    self.view.version_model.appendRow(ver_item)
+
+            except Exception as e:
+                logger.error(f"Failed to scan versions for asset {asset_name}: {e}")
+                self.current_version = "Pipeline Error"
+                self.selected_file_path = None
+                self.view.ui.label_version.setText("<font color='#f87171'><b>Pipeline Error</b></font>")
+                self.update_metadata_table()
+                QMessageBox.warning(
+                    self.view,
+                    "Pipeline Not Found",
+                    f"Could not load pipeline for asset '{asset_name}':\n\n{e}\n\n"
+                    "Please configure the valid zeroxe_map.yaml path in Settings -> NAS.",
+                )
+                return
+
 
         # 4. Auto-select the latest version by default
         total_rows = self.view.version_model.rowCount()

@@ -131,6 +131,20 @@ class LockService:
                 config_path=config_path,
             )
 
+        # Fallback to local LockManager
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.check_lock(
+                    entity_key=entity_key,
+                    project_path=project_path,
+                    config_path=config_path,
+                )
+            except Exception as e:
+                logger.warning(f"Fallback LockManager check_lock error: {e}")
+
         return False, None
 
     @classmethod
@@ -147,6 +161,7 @@ class LockService:
         user = cls.get_current_user()
         config_path = PipelineService.get_active_pipeline_yaml_path(project_name=project_name)
         module = PipelineService.load_pipeline_module(project_name=project_name)
+
         if module and hasattr(module, "acquire_lock"):
             return module.acquire_lock(
                 entity_key=entity_key,
@@ -162,6 +177,29 @@ class LockService:
                 force=force,
             )
 
+        # Fallback to local LockManager
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.acquire_lock(
+                    entity_key=entity_key,
+                    kitsu_id=user.kitsu_id,
+                    name=user.name,
+                    email=user.email,
+                    workstation=user.workstation,
+                    working_file=working_file,
+                    current_version=current_version,
+                    project_name=project_name or "",
+                    project_path=project_path,
+                    config_path=config_path,
+                    force=force,
+                )
+            except Exception as e:
+                logger.error(f"Fallback LockManager acquire_lock error: {e}")
+                return False, f"Lock acquisition error: {e}", None
+
         return True, "Lock module bypassed", None
 
     @classmethod
@@ -175,6 +213,7 @@ class LockService:
         user = cls.get_current_user()
         config_path = PipelineService.get_active_pipeline_yaml_path(project_name=project_name)
         module = PipelineService.load_pipeline_module(project_name=project_name)
+
         if module and hasattr(module, "release_lock"):
             return module.release_lock(
                 entity_key=entity_key,
@@ -184,6 +223,23 @@ class LockService:
                 project_path=project_path,
                 config_path=config_path,
             )
+
+        # Fallback to local LockManager
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.release_lock(
+                    entity_key=entity_key,
+                    kitsu_id=user.kitsu_id,
+                    name=user.name,
+                    workstation=user.workstation,
+                    project_path=project_path,
+                    config_path=config_path,
+                )
+            except Exception as e:
+                logger.warning(f"Fallback LockManager release_lock error: {e}")
 
         return True, "Lock released"
 
@@ -199,6 +255,7 @@ class LockService:
         user = cls.get_current_user()
         config_path = PipelineService.get_active_pipeline_yaml_path(project_name=project_name)
         module = PipelineService.load_pipeline_module(project_name=project_name)
+
         if module and hasattr(module, "force_unlock"):
             return module.force_unlock(
                 entity_key=entity_key,
@@ -209,6 +266,25 @@ class LockService:
                 project_path=project_path,
                 config_path=config_path,
             )
+
+        # Fallback to local LockManager
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.force_unlock(
+                    entity_key=entity_key,
+                    kitsu_id=user.kitsu_id,
+                    name=user.name,
+                    reason=reason,
+                    workstation=user.workstation,
+                    project_path=project_path,
+                    config_path=config_path,
+                )
+            except Exception as e:
+                logger.error(f"Fallback LockManager force_unlock error: {e}")
+                return False, f"Force unlock error: {e}", None
 
         return True, "Force unlock completed", None
 
@@ -222,10 +298,27 @@ class LockService:
         """Retrieve history data for an entity."""
         config_path = PipelineService.get_active_pipeline_yaml_path(project_name=project_name)
         module = PipelineService.load_pipeline_module(project_name=project_name)
+
         if module and hasattr(module, "get_history"):
             return module.get_history(
                 entity_key=entity_key,
                 project_path=project_path,
                 config_path=config_path,
             )
+
+        # Fallback to local LockManager
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.get_history(
+                    entity_key=entity_key,
+                    project_path=project_path,
+                    config_path=config_path,
+                )
+            except Exception as e:
+                logger.warning(f"Fallback LockManager get_history error: {e}")
+
         return {"versions": [], "activity_log": []}
+

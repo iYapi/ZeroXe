@@ -35,6 +35,20 @@ class ShotPathResult:
     version_number: int
 
 
+@dataclass
+class AssetPathResult:
+    """Encapsulates resolved asset path information."""
+
+    master_path: Path
+    version_path: Path
+    asset_dir: Path
+    version_dir: Path
+    file_name: str
+    version_file_name: str
+    version_number: int
+
+
+
 class PipelineService:
     """High-performance service for resolving pipeline paths and executing pipeline commands."""
 
@@ -312,6 +326,34 @@ class PipelineService:
                 version_number=res.version_number,
             )
 
+        # Fallback to direct ShotPathGenerator
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator
+
+                gen = ShotPathGenerator(config=config_path)
+                res = gen.generate_shot_paths(
+                    department=department,
+                    episode=episode,
+                    sequence=sequence,
+                    shot=shot,
+                    version_number=version_number,
+                    version_folder=version_folder,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return ShotPathResult(
+                    master_path=Path(res.master_path),
+                    version_path=Path(res.version_path),
+                    shot_dir=Path(res.shot_dir),
+                    version_dir=Path(res.version_dir),
+                    file_name=res.file_name,
+                    version_file_name=res.version_file_name,
+                    version_number=res.version_number,
+                )
+            except Exception as e:
+                logger.warning(f"Fallback ShotPathGenerator error: {e}")
+
         reason = cls._get_pipeline_error_reason(project_name=project_name)
         raise FileNotFoundError(reason)
 
@@ -344,6 +386,25 @@ class PipelineService:
                 extension=extension,
             )
             return [(int(v_num), Path(v_p)) for v_num, v_p in raw_list]
+
+        # Fallback to direct ShotPathGenerator
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator
+
+                gen = ShotPathGenerator(config=config_path)
+                raw_list = gen.list_existing_versions(
+                    department=department,
+                    episode=episode,
+                    sequence=sequence,
+                    shot=shot,
+                    version_folder=version_folder,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return [(int(v_num), Path(v_p)) for v_num, v_p in raw_list]
+            except Exception as e:
+                logger.warning(f"Fallback ShotPathGenerator list error: {e}")
 
         reason = cls._get_pipeline_error_reason(project_name=project_name)
         raise FileNotFoundError(reason)
@@ -379,5 +440,207 @@ class PipelineService:
                 )
             )
 
+        # Fallback to direct ShotPathGenerator
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator
+
+                gen = ShotPathGenerator(config=config_path)
+                return int(
+                    gen.get_next_version_number(
+                        department=department,
+                        episode=episode,
+                        sequence=sequence,
+                        shot=shot,
+                        version_folder=version_folder,
+                        project_path=project_path,
+                        extension=extension,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Fallback ShotPathGenerator get_next error: {e}")
+
         reason = cls._get_pipeline_error_reason(project_name=project_name)
         raise FileNotFoundError(reason)
+
+    # --------------------------------------------------------------------------
+    # Asset Path Resolution
+    # --------------------------------------------------------------------------
+    @classmethod
+    def resolve_asset(
+        cls,
+        asset_type: str,
+        asset_name: str,
+        department: str = "",
+        version_number: int = 1,
+        project_name: Optional[str] = None,
+        project_path: Optional[str] = None,
+        extension: str = ".blend",
+    ) -> AssetPathResult:
+        """Resolve asset master path and version path from pipeline.yaml."""
+        version_folder = SettingsService.get_version_folder() or "progress"
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+
+        # 1. Try external module if available
+        module = cls.load_pipeline_module(project_name=project_name)
+        if module and hasattr(module, "resolve_asset_paths"):
+            try:
+                res = module.resolve_asset_paths(
+                    asset_type=asset_type,
+                    asset_name=asset_name,
+                    department=department,
+                    version_number=version_number,
+                    version_folder=version_folder,
+                    config_path=config_path,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return AssetPathResult(
+                    master_path=Path(res.master_path),
+                    version_path=Path(res.version_path),
+                    asset_dir=Path(res.asset_dir),
+                    version_dir=Path(res.version_dir),
+                    file_name=res.file_name,
+                    version_file_name=res.version_file_name,
+                    version_number=res.version_number,
+                )
+            except Exception as e:
+                logger.warning(f"External module resolve_asset_paths failed: {e}")
+
+        # 2. Built-in AssetPathGenerator fallback
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.asset_path_generator import AssetPathGenerator
+
+                gen = AssetPathGenerator(config=config_path)
+                res = gen.generate_asset_paths(
+                    asset_type=asset_type,
+                    asset_name=asset_name,
+                    department=department,
+                    version_number=version_number,
+                    version_folder=version_folder,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return AssetPathResult(
+                    master_path=Path(res.master_path),
+                    version_path=Path(res.version_path),
+                    asset_dir=Path(res.asset_dir),
+                    version_dir=Path(res.version_dir),
+                    file_name=res.file_name,
+                    version_file_name=res.version_file_name,
+                    version_number=res.version_number,
+                )
+            except Exception as e:
+                logger.error(f"AssetPathGenerator fallback error: {e}")
+
+        reason = cls._get_pipeline_error_reason(project_name=project_name)
+        raise FileNotFoundError(reason)
+
+    @classmethod
+    def list_asset_versions(
+        cls,
+        asset_type: str,
+        asset_name: str,
+        department: str = "",
+        project_name: Optional[str] = None,
+        project_path: Optional[str] = None,
+        extension: str = ".blend",
+    ) -> List[Tuple[int, Path]]:
+        """List existing version files for an asset."""
+        version_folder = SettingsService.get_version_folder() or "progress"
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+
+        # 1. Try external module if available
+        module = cls.load_pipeline_module(project_name=project_name)
+        if module and hasattr(module, "list_asset_versions"):
+            try:
+                raw_list = module.list_asset_versions(
+                    asset_type=asset_type,
+                    asset_name=asset_name,
+                    department=department,
+                    version_folder=version_folder,
+                    config_path=config_path,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return [(int(v_num), Path(v_p)) for v_num, v_p in raw_list]
+            except Exception as e:
+                logger.warning(f"External module list_asset_versions failed: {e}")
+
+        # 2. Built-in AssetPathGenerator fallback
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.asset_path_generator import AssetPathGenerator
+
+                gen = AssetPathGenerator(config=config_path)
+                raw_list = gen.list_existing_versions(
+                    asset_type=asset_type,
+                    asset_name=asset_name,
+                    department=department,
+                    version_folder=version_folder,
+                    project_path=project_path,
+                    extension=extension,
+                )
+                return [(int(v_num), Path(v_p)) for v_num, v_p in raw_list]
+            except Exception as e:
+                logger.error(f"AssetPathGenerator list fallback error: {e}")
+
+        reason = cls._get_pipeline_error_reason(project_name=project_name)
+        raise FileNotFoundError(reason)
+
+    @classmethod
+    def get_next_asset_version(
+        cls,
+        asset_type: str,
+        asset_name: str,
+        department: str = "",
+        project_name: Optional[str] = None,
+        project_path: Optional[str] = None,
+        extension: str = ".blend",
+    ) -> int:
+        """Get the next version number for an asset."""
+        version_folder = SettingsService.get_version_folder() or "progress"
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+
+        # 1. Try external module if available
+        module = cls.load_pipeline_module(project_name=project_name)
+        if module and hasattr(module, "get_next_asset_version"):
+            try:
+                return int(
+                    module.get_next_asset_version(
+                        asset_type=asset_type,
+                        asset_name=asset_name,
+                        department=department,
+                        version_folder=version_folder,
+                        config_path=config_path,
+                        project_path=project_path,
+                        extension=extension,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"External module get_next_asset_version failed: {e}")
+
+        # 2. Built-in AssetPathGenerator fallback
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Paths.asset_path_generator import AssetPathGenerator
+
+                gen = AssetPathGenerator(config=config_path)
+                return int(
+                    gen.get_next_version_number(
+                        asset_type=asset_type,
+                        asset_name=asset_name,
+                        department=department,
+                        version_folder=version_folder,
+                        project_path=project_path,
+                        extension=extension,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"AssetPathGenerator get_next fallback error: {e}")
+
+        reason = cls._get_pipeline_error_reason(project_name=project_name)
+        raise FileNotFoundError(reason)
+
+

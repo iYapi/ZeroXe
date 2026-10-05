@@ -1,7 +1,7 @@
 """Modular Entrypoint for ZeroXe Pipeline Commands.
 
 Provides unified Python API and CLI interface for Qt app integration,
-path generation, lock management, and builder dispatching.
+path generation for shots & assets, lock management, and builder dispatching.
 """
 
 import argparse
@@ -20,14 +20,18 @@ for _p in [str(_pipeline_root), str(_current_dir)]:
 
 try:
     from Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+    from Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
 except ImportError:
     try:
         from Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+        from Commands.Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
     except ImportError:
         try:
             from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+            from pipeline.Commands.Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
         except ImportError:
             from .Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+            from .Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
 
 try:
     from Locks.lock_manager import LockManager
@@ -44,6 +48,7 @@ except ImportError:
 DEFAULT_PIPELINE_YAML = _pipeline_root / "pipeline.yaml"
 
 _GENERATOR_CACHE: Dict[str, ShotPathGenerator] = {}
+_ASSET_GENERATOR_CACHE: Dict[str, AssetPathGenerator] = {}
 _LOCK_MANAGER_CACHE: Dict[str, LockManager] = {}
 
 
@@ -54,6 +59,15 @@ def get_generator(config_path: Optional[Union[str, Path]] = None) -> ShotPathGen
     if key not in _GENERATOR_CACHE:
         _GENERATOR_CACHE[key] = ShotPathGenerator(config=cfg)
     return _GENERATOR_CACHE[key]
+
+
+def get_asset_generator(config_path: Optional[Union[str, Path]] = None) -> AssetPathGenerator:
+    """Create or return cached AssetPathGenerator initialized with pipeline.yaml."""
+    cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
+    key = str(cfg.resolve())
+    if key not in _ASSET_GENERATOR_CACHE:
+        _ASSET_GENERATOR_CACHE[key] = AssetPathGenerator(config=cfg)
+    return _ASSET_GENERATOR_CACHE[key]
 
 
 def get_lock_manager(config_path: Optional[Union[str, Path]] = None) -> LockManager:
@@ -68,11 +82,12 @@ def get_lock_manager(config_path: Optional[Union[str, Path]] = None) -> LockMana
 def clear_generator_cache() -> None:
     """Clear in-memory generator, lock manager, and config caches."""
     _GENERATOR_CACHE.clear()
+    _ASSET_GENERATOR_CACHE.clear()
     _LOCK_MANAGER_CACHE.clear()
 
 
 # ==============================================================================
-# Path Resolution APIs
+# Shot Path Resolution APIs
 # ==============================================================================
 def resolve_shot_paths(
     department: str,
@@ -146,16 +161,94 @@ def get_next_shot_version(
 
 
 # ==============================================================================
+# Asset Path Resolution APIs
+# ==============================================================================
+def resolve_asset_paths(
+    asset_type: str,
+    asset_name: str,
+    department: str = "",
+    version_number: int = 1,
+    version_folder: str = "progress",
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    extension: str = ".blend",
+) -> AssetPathResult:
+    """Resolve master path and version path for a given asset."""
+    generator = get_asset_generator(config_path)
+    return generator.generate_asset_paths(
+        asset_type=asset_type,
+        asset_name=asset_name,
+        department=department,
+        version_number=version_number,
+        version_folder=version_folder,
+        project_path=project_path,
+        extension=extension,
+    )
+
+
+def list_asset_versions(
+    asset_type: str,
+    asset_name: str,
+    department: str = "",
+    version_folder: str = "progress",
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    extension: str = ".blend",
+) -> List[Tuple[int, Path]]:
+    """List existing versions for an asset."""
+    generator = get_asset_generator(config_path)
+    return generator.list_existing_versions(
+        asset_type=asset_type,
+        asset_name=asset_name,
+        department=department,
+        version_folder=version_folder,
+        project_path=project_path,
+        extension=extension,
+    )
+
+
+def get_next_asset_version(
+    asset_type: str,
+    asset_name: str,
+    department: str = "",
+    version_folder: str = "progress",
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    extension: str = ".blend",
+) -> int:
+    """Get the next version number for an asset."""
+    generator = get_asset_generator(config_path)
+    return generator.get_next_version_number(
+        asset_type=asset_type,
+        asset_name=asset_name,
+        department=department,
+        version_folder=version_folder,
+        project_path=project_path,
+        extension=extension,
+    )
+
+
+# ==============================================================================
 # Lock and Version History APIs
 # ==============================================================================
 def build_entity_key(
     department: str,
-    episode: str,
-    sequence: str,
-    shot: str,
+    episode: str = "",
+    sequence: str = "",
+    shot: str = "",
     task: str = "",
+    asset_type: str = "",
+    asset_name: str = "",
 ) -> str:
-    """Construct standard entity key for shot task (e.g. ep998_sq01_sh0010_anm)."""
+    """Construct standard entity key for shot or asset."""
+    if asset_name:
+        clean_at = asset_type.strip().lower()
+        clean_an = asset_name.strip().lower().replace(" ", "_")
+        clean_dept = department.strip().lower() or task.strip().lower()
+        if clean_dept and clean_dept not in ("asset", "none"):
+            return f"asset_{clean_at}_{clean_an}_{clean_dept}"
+        return f"asset_{clean_at}_{clean_an}"
+
     return LockManager.build_entity_key(
         department=department, episode=episode, sequence=sequence, shot=shot, task=task
     )
@@ -301,6 +394,16 @@ def main() -> None:
     shot_parser.add_argument("--mount", help="Override project mount root path")
     shot_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
+    # asset-path command
+    asset_parser = subparsers.add_parser("asset-path", help="Resolve master and version paths for an asset")
+    asset_parser.add_argument("--type", "-t", required=True, help="Asset type (e.g. CHAR, PROPS, SET, VEHICLE)")
+    asset_parser.add_argument("--name", "-n", required=True, help="Asset name (e.g. Hero_Char, c-hero)")
+    asset_parser.add_argument("--dept", "-d", default="", help="Department/task name (e.g. Model, Texture)")
+    asset_parser.add_argument("--ver", "-v", type=int, default=1, help="Version number (default: 1)")
+    asset_parser.add_argument("--ver-folder", default="progress", help="Version folder name (default: progress)")
+    asset_parser.add_argument("--mount", help="Override project mount root path")
+    asset_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
     # lock command
     lock_parser = subparsers.add_parser("lock", help="Check or acquire lock")
     lock_parser.add_argument("--key", "-k", required=True, help="Entity key (e.g. ep998_sq01_sh0010_anm)")
@@ -337,6 +440,34 @@ def main() -> None:
             print(f"Master Path : {result.master_path}")
             print(f"Version Path: {result.version_path}")
             print(f"Shot Dir    : {result.shot_dir}")
+            print(f"Version Dir : {result.version_dir}")
+
+    elif args.command == "asset-path":
+        result = resolve_asset_paths(
+            asset_type=args.type,
+            asset_name=args.name,
+            department=args.dept,
+            version_number=args.ver,
+            version_folder=args.ver_folder,
+            config_path=args.config,
+            project_path=args.mount,
+        )
+
+        if args.json:
+            output = {
+                "master_path": str(result.master_path),
+                "version_path": str(result.version_path),
+                "asset_dir": str(result.asset_dir),
+                "version_dir": str(result.version_dir),
+                "file_name": result.file_name,
+                "version_file_name": result.version_file_name,
+                "version_number": result.version_number,
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            print(f"Master Path : {result.master_path}")
+            print(f"Version Path: {result.version_path}")
+            print(f"Asset Dir   : {result.asset_dir}")
             print(f"Version Dir : {result.version_dir}")
 
     elif args.command == "lock":
