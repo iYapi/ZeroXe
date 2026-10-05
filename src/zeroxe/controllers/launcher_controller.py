@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QProcess, Qt
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QMessageBox
 
@@ -23,6 +23,7 @@ from zeroxe.models.project_model import Project
 from zeroxe.models.shot_model import Episode, Sequence, Shot
 from zeroxe.services.asset_service import AssetService
 from zeroxe.services.department_service import DepartmentService
+from zeroxe.services.lock_service import LockService
 from zeroxe.services.pipeline_service import PipelineService
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.settings_service import SettingsService
@@ -50,6 +51,9 @@ class LauncherController(QObject):
         self.current_asset: Optional[Asset] = None
         self.current_version: str = ""
         self.selected_file_path: Optional[str] = None
+
+        # Track active DCC child processes for auto-unlock
+        self._active_processes: Dict[str, QProcess] = {}
 
         self._bind_signals()
         self.load_initial_data()
@@ -272,10 +276,84 @@ class LauncherController(QObject):
         else:
             self._clear_item_details()
 
+    def get_current_entity_key(self) -> Optional[str]:
+        """Construct normalized entity key for the currently selected shot/asset."""
+        if not self.current_project:
+            return None
+
+        dept_name = self.current_department.name if self.current_department else "Layout"
+        proj_name = self.current_project.name
+
+        if self.current_shot:
+            ep = self.current_shot.episode or self.view.ui.comboBox_category.currentText()
+            sq = self.current_shot.sequence or ""
+            sh = self.current_shot.name
+            return LockService.build_entity_key(
+                department=dept_name,
+                episode=ep,
+                sequence=sq,
+                shot=sh,
+                project_name=proj_name,
+            )
+        elif self.current_asset:
+            asset_name = self.current_asset.name
+            return f"asset_{asset_name}_{dept_name}".lower().replace(" ", "_")
+
+        return None
+
     def update_metadata_table(self) -> None:
-        """Format and update metadata property/value table."""
+        """Format and update metadata property/value table with real-time lock status."""
         self.view.metadata_model.removeRows(0, self.view.metadata_model.rowCount())
         dept_name = self.current_department.name if self.current_department else "None"
+        proj_name = self.current_project.name if self.current_project else "None"
+
+        # Check lock and history status
+        entity_key = self.get_current_entity_key()
+        lock_status = "Available (Unlocked)"
+        locked_by_str = ""
+        locked_at_str = ""
+        locked_ws_str = ""
+
+        latest_opened_by = ""
+        latest_opened_at = ""
+        latest_opened_ws = ""
+        latest_version_author = ""
+
+        if entity_key:
+            try:
+                # 1. Check active lock
+                is_locked, lock_data = LockService.check_lock(entity_key, project_name=proj_name)
+                if is_locked and lock_data:
+                    k_id = lock_data.get("kitsu_id") or "N/A"
+                    name = lock_data.get("name") or "Unknown"
+                    ws = lock_data.get("workstation") or "Unknown"
+                    at = lock_data.get("locked_at") or "Unknown"
+
+                    lock_status = f"LOCKED by {name}"
+                    locked_by_str = f"{name} (Kitsu ID: {k_id})"
+                    locked_at_str = str(at)
+                    locked_ws_str = str(ws)
+
+                # 2. Query history for Latest Opened By audit trail
+                hist_data = LockService.get_history(entity_key, project_name=proj_name)
+                activity_log = hist_data.get("activity_log", [])
+                for entry in reversed(activity_log):
+                    if entry.get("action") in ("OPEN_FILE", "SAVE_VERSION"):
+                        u_name = entry.get("user") or "Unknown"
+                        k_id = entry.get("kitsu_id") or ""
+                        latest_opened_by = f"{u_name} (Kitsu ID: {k_id})" if k_id else u_name
+                        latest_opened_at = str(entry.get("timestamp") or "")
+                        latest_opened_ws = str(entry.get("workstation") or "")
+                        break
+
+                # 3. Check author for current version
+                versions = hist_data.get("versions", [])
+                matching_v = next((v for v in versions if v.get("version") == self.current_version), None)
+                if matching_v:
+                    latest_version_author = matching_v.get("author", "")
+
+            except Exception as e:
+                logger.debug(f"Could not query lock/history for {entity_key}: {e}")
 
         if self.current_shot:
             metadata: Dict[str, Any] = {
@@ -289,9 +367,21 @@ class LauncherController(QObject):
                 "Assets Linked": len(self.current_shot.assets),
                 "Version": self.current_version or "None",
                 "Selected File": self.selected_file_path or "None",
+                "Lock Status": lock_status,
             }
+            if locked_by_str:
+                metadata["Currently Opened By"] = locked_by_str
+                metadata["Current Workstation"] = locked_ws_str
+                metadata["Opened At"] = locked_at_str
+            elif latest_opened_by:
+                metadata["Latest Opened By"] = latest_opened_by
+                metadata["Latest Opened At"] = latest_opened_at
+                metadata["Latest Workstation"] = latest_opened_ws
+
+            if latest_version_author:
+                metadata["Version Author"] = latest_version_author
+
         elif self.current_asset:
-            proj_name = self.current_project.name if self.current_project else "None"
             metadata = {
                 "Asset Name": self.current_asset.name,
                 "Asset Type": self.current_asset.asset_type or "None",
@@ -299,7 +389,19 @@ class LauncherController(QObject):
                 "Project": proj_name,
                 "Version": self.current_version or "None",
                 "Selected File": self.selected_file_path or "None",
+                "Lock Status": lock_status,
             }
+            if locked_by_str:
+                metadata["Currently Opened By"] = locked_by_str
+                metadata["Current Workstation"] = locked_ws_str
+                metadata["Opened At"] = locked_at_str
+            elif latest_opened_by:
+                metadata["Latest Opened By"] = latest_opened_by
+                metadata["Latest Opened At"] = latest_opened_at
+                metadata["Latest Workstation"] = latest_opened_ws
+
+            if latest_version_author:
+                metadata["Version Author"] = latest_version_author
         else:
             return
 
@@ -495,7 +597,7 @@ class LauncherController(QObject):
             )
 
     def on_open_path(self) -> None:
-        """Open the currently selected item file using active Blender executable."""
+        """Open the currently selected item file using active Blender executable with automatic locking."""
         active_blender = SettingsService.get_active_blender()
         if not active_blender or not Path(active_blender).is_file():
             QMessageBox.warning(
@@ -515,17 +617,43 @@ class LauncherController(QObject):
             return
 
         target_file = Path(self.selected_file_path)
+        entity_key = self.get_current_entity_key()
+        proj_name = self.current_project.name if self.current_project else None
 
-        if target_file.is_file():
-            try:
-                subprocess.Popen([active_blender, str(target_file)])
-            except Exception as e:
-                QMessageBox.critical(
-                    self.view,
-                    "Error Opening File",
-                    f"Failed to launch Blender with file:\n\n{target_file}\n\nError: {e}",
-                )
-        else:
+        # 1. Lock Validation Check
+        if entity_key:
+            is_locked, lock_data = LockService.check_lock(entity_key, project_name=proj_name)
+            current_user = LockService.get_current_user()
+
+            if is_locked and lock_data:
+                existing_kitsu_id = str(lock_data.get("kitsu_id", ""))
+                existing_name = str(lock_data.get("name", ""))
+                existing_ws = str(lock_data.get("workstation", ""))
+
+                # Check if locked by another user
+                is_other_user = True
+                if (
+                    (current_user.kitsu_id and existing_kitsu_id == current_user.kitsu_id)
+                    or (current_user.name and existing_name.lower() == current_user.name.lower())
+                ) and (existing_ws == current_user.workstation):
+                    is_other_user = False
+
+                if is_other_user:
+                    QMessageBox.warning(
+                        self.view,
+                        "File Is Locked",
+                        f"This shot/asset is currently LOCKED by another artist:\n\n"
+                        f"• Artist: {existing_name or 'Unknown'}\n"
+                        f"• Kitsu ID: {existing_kitsu_id or 'N/A'}\n"
+                        f"• Workstation: {existing_ws or 'Unknown'}\n"
+                        f"• Locked Since: {lock_data.get('locked_at', 'Unknown')}\n\n"
+                        f"You cannot open this file while another artist is editing it.\n"
+                        f"If this is a stale lock, click 'Unlock' to Force Unlock.",
+                    )
+                    return
+
+        # 2. Ensure target file or directory exists
+        if not target_file.is_file():
             reply = QMessageBox.question(
                 self.view,
                 "File Does Not Exist",
@@ -533,19 +661,124 @@ class LauncherController(QObject):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
-            if reply == QMessageBox.StandardButton.Yes:
-                try:
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    subprocess.Popen([active_blender, str(target_file)])
-                except Exception as e:
-                    QMessageBox.critical(
-                        self.view,
-                        "Error Opening File",
-                        f"Failed to launch Blender:\n\n{e}",
-                    )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                QMessageBox.critical(
+                    self.view,
+                    "Directory Creation Error",
+                    f"Failed to create directory structure:\n\n{e}",
+                )
+                return
+
+        # 3. Acquire Lock in Pipeline
+        if entity_key:
+            success, msg, active_lock = LockService.acquire_lock(
+                entity_key=entity_key,
+                working_file=str(target_file),
+                current_version=self.current_version,
+                project_name=proj_name,
+            )
+            if not success:
+                QMessageBox.warning(
+                    self.view,
+                    "Lock Failed",
+                    f"Could not acquire pipeline lock:\n\n{msg}",
+                )
+                return
+
+        # 4. Launch Blender via QProcess and monitor for auto-unlock
+        try:
+            process = QProcess(self)
+            if entity_key:
+                self._active_processes[entity_key] = process
+                process.finished.connect(
+                    lambda exit_code, exit_status, k=entity_key, p=proj_name: self._on_dcc_finished(k, p, exit_code)
+                )
+
+            process.start(active_blender, [str(target_file)])
+            self.update_metadata_table()
+
+        except Exception as e:
+            # Release lock if launch failed
+            if entity_key:
+                LockService.release_lock(entity_key, project_name=proj_name)
+                self.update_metadata_table()
+
+            QMessageBox.critical(
+                self.view,
+                "Error Opening File",
+                f"Failed to launch Blender:\n\n{e}",
+            )
+
+    def _on_dcc_finished(self, entity_key: str, project_name: Optional[str], exit_code: int) -> None:
+        """Handle Blender process exit by automatically releasing lock."""
+        logger.info(f"DCC closed for '{entity_key}' (exit code: {exit_code}). Auto-releasing lock...")
+        try:
+            LockService.release_lock(entity_key, project_name=project_name)
+        except Exception as e:
+            logger.error(f"Failed to auto-release lock for '{entity_key}': {e}")
+
+        if entity_key in self._active_processes:
+            del self._active_processes[entity_key]
+
+        if self.get_current_entity_key() == entity_key:
+            self.update_metadata_table()
 
     def on_unlock_task(self) -> None:
-        """Unlock file / task."""
-        QMessageBox.information(self.view, "Unlock", "File and task locks released.")
+        """Handle Unlock button click by performing a Force Unlock with user confirmation."""
+        entity_key = self.get_current_entity_key()
+        if not entity_key:
+            QMessageBox.warning(self.view, "No Selection", "Please select a shot or asset to unlock.")
+            return
+
+        proj_name = self.current_project.name if self.current_project else None
+        is_locked, lock_data = LockService.check_lock(entity_key, project_name=proj_name)
+
+        if not is_locked or not lock_data:
+            QMessageBox.information(self.view, "Unlock", "This item is currently NOT locked.")
+            return
+
+        holder_name = lock_data.get("name", "Unknown")
+        holder_kitsu = lock_data.get("kitsu_id", "N/A")
+        holder_ws = lock_data.get("workstation", "Unknown")
+        locked_at = lock_data.get("locked_at", "Unknown")
+
+        reply = QMessageBox.question(
+            self.view,
+            "Force Unlock Confirmation",
+            f"This item is currently locked by:\n\n"
+            f"• Artist: {holder_name}\n"
+            f"• Kitsu ID: {holder_kitsu}\n"
+            f"• Workstation: {holder_ws}\n"
+            f"• Locked Since: {locked_at}\n\n"
+            f"Are you sure you want to FORCE UNLOCK this file?\n"
+            f"This action will be recorded in the pipeline audit log.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            success, msg, _ = LockService.force_unlock(
+                entity_key=entity_key,
+                reason="Manual force unlock via ZeroXe Launcher",
+                project_name=proj_name,
+            )
+            if success:
+                QMessageBox.information(
+                    self.view,
+                    "Force Unlocked",
+                    f"Item successfully unlocked:\n\n{msg}",
+                )
+                self.update_metadata_table()
+            else:
+                QMessageBox.critical(
+                    self.view,
+                    "Unlock Failed",
+                    f"Failed to force unlock:\n\n{msg}",
+                )
+
 
 
