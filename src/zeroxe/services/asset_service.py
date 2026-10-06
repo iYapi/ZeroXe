@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Optional
 import gazu
 
+from zeroxe.api.gazu_client import is_kitsu_connected
 from zeroxe.models.asset_model import Asset, AssetType
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ class AssetService:
     @classmethod
     def get_asset_types_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[AssetType]:
         """Fetch all asset types for a project with optional in-memory caching."""
+        if not is_kitsu_connected() or not project_id:
+            return []
+
         if use_cache and project_id in cls._asset_type_cache:
             return cls._asset_type_cache[project_id]
 
@@ -41,6 +45,9 @@ class AssetService:
     @classmethod
     def get_assets_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[Asset]:
         """Fetch all assets for a project with asset type lookup and optional in-memory caching."""
+        if not is_kitsu_connected() or not project_id:
+            return []
+
         if use_cache and project_id in cls._asset_cache:
             return cls._asset_cache[project_id]
 

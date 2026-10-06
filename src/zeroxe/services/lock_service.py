@@ -42,19 +42,22 @@ class LockService:
         workstation = socket.gethostname() or platform.node() or "Workstation"
 
         try:
-            import gazu
+            from zeroxe.api.gazu_client import is_kitsu_connected
 
-            # Attempt to fetch currently authenticated user from Kitsu/Gazu
-            curr = getattr(gazu.client, "get_current_user", None)
-            user_data = curr() if callable(curr) else None
-            if user_data and isinstance(user_data, dict):
-                kitsu_id = str(user_data.get("id", ""))
-                first_name = str(user_data.get("first_name", "")).strip()
-                last_name = str(user_data.get("last_name", "")).strip()
-                full_name = f"{first_name} {last_name}".strip()
-                user_name = full_name or str(user_data.get("name", "")) or user_email
-                if user_data.get("email"):
-                    user_email = user_data.get("email")
+            if is_kitsu_connected():
+                import gazu
+
+                # Attempt to fetch currently authenticated user from Kitsu/Gazu
+                curr = getattr(gazu.client, "get_current_user", None)
+                user_data = curr() if callable(curr) else None
+                if user_data and isinstance(user_data, dict):
+                    kitsu_id = str(user_data.get("id", ""))
+                    first_name = str(user_data.get("first_name", "")).strip()
+                    last_name = str(user_data.get("last_name", "")).strip()
+                    full_name = f"{first_name} {last_name}".strip()
+                    user_name = full_name or str(user_data.get("name", "")) or user_email
+                    if user_data.get("email"):
+                        user_email = user_data.get("email")
         except Exception as e:
             logger.debug(f"Could not retrieve user info from Kitsu: {e}")
 

@@ -95,3 +95,18 @@ def test_get_asset_types_by_project_id() -> None:
     asset_types = asset_service.get_asset_types_by_project_id("0f029a6d-603e-4d6d-8217-902e2e32f274")
     if PRINTOUT:
         print(asset_types)
+
+
+def test_init_kitsu_skips_when_empty_config() -> None:
+    """Ensure init_kitsu skips connection attempt immediately (0ms) when credentials/URL are empty."""
+    from zeroxe.api.gazu_client import init_kitsu, is_kitsu_configured
+    import time
+
+    start = time.perf_counter()
+    success, msg = init_kitsu(url="", email="", password="")
+    duration = time.perf_counter() - start
+
+    assert success is False
+    assert "incomplete or empty" in msg.lower() or "skipping" in msg.lower()
+    # Must complete almost instantaneously (< 0.1s), not waiting on network timeouts
+    assert duration < 0.1

@@ -6,7 +6,7 @@ Provides fast, optimized querying and in-memory caching for episodes, sequences,
 import logging
 from typing import Dict, List, Optional
 import gazu
-
+from zeroxe.api.gazu_client import is_kitsu_connected
 from zeroxe.models.shot_model import Episode, Sequence, Shot
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,9 @@ class ShotService:
     @classmethod
     def get_episodes_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[Episode]:
         """Fetch all episodes for a project with optional in-memory caching."""
+        if not is_kitsu_connected() or not project_id:
+            return []
+
         if use_cache and project_id in cls._episode_cache:
             return cls._episode_cache[project_id]
 
@@ -43,6 +46,9 @@ class ShotService:
     @classmethod
     def get_sequences_by_episode_id(cls, episode_id: str, use_cache: bool = True) -> List[Sequence]:
         """Fetch all sequences for an episode with optional in-memory caching."""
+        if not is_kitsu_connected() or not episode_id:
+            return []
+
         if use_cache and episode_id in cls._sequence_cache:
             return cls._sequence_cache[episode_id]
 
@@ -66,6 +72,9 @@ class ShotService:
 
         Avoids the N+1 network request bottleneck by pre-mapping sequence names in O(1).
         """
+        if not is_kitsu_connected() or not episode_id:
+            return []
+
         if use_cache and episode_id in cls._shot_cache:
             return cls._shot_cache[episode_id]
 
@@ -117,6 +126,9 @@ class ShotService:
     @classmethod
     def get_assets_for_shot(cls, shot_id: str) -> List[dict]:
         """Fetch assets linked to a specific shot on-demand when inspected."""
+        if not is_kitsu_connected() or not shot_id:
+            return []
+
         try:
             raw_assets = gazu.asset.all_assets_for_shot(shot_id) or []
             return [

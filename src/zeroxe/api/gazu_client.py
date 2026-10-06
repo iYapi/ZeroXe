@@ -8,7 +8,7 @@ from zeroxe.services.settings_service import SettingsService
 logger = logging.getLogger(__name__)
 
 # Default network timeout for Kitsu requests (in seconds) to prevent application hangs
-DEFAULT_TIMEOUT = 3.0
+DEFAULT_TIMEOUT = 2.5
 
 
 def _ensure_session_timeout(client: gazu.client.KitsuClient = None, timeout: float = DEFAULT_TIMEOUT) -> None:
@@ -30,26 +30,54 @@ def _ensure_session_timeout(client: gazu.client.KitsuClient = None, timeout: flo
         logger.warning(f"Could not configure session timeout: {e}")
 
 
+def is_kitsu_configured() -> bool:
+    """Check if all required Kitsu settings (url, email, password) are populated."""
+    url = (SettingsService.get_kitsu_url() or "").strip()
+    email = (SettingsService.get_kitsu_email() or "").strip()
+    password = SettingsService.get_kitsu_password() or ""
+    return bool(url and email and password)
+
+
+def is_kitsu_connected() -> bool:
+    """Check if gazu client is initialized and authenticated with Kitsu."""
+    try:
+        client = gazu.client.default_client
+        if not client:
+            return False
+        host = getattr(client, "host", "") or ""
+        if not host or "change.serverhost" in host:
+            return False
+        tokens = getattr(client, "tokens", {}) or {}
+        access_token = getattr(client, "access_token", None) or tokens.get("access_token")
+        return bool(access_token)
+    except Exception:
+        return False
+
+
 def init_kitsu(
     url: Optional[str] = None,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> Tuple[bool, str]:
     """Initializes the Gazu host and authenticates user.
 
     If parameters are not provided, loads them from SettingsService.
+    If configuration is empty or incomplete, skips connection attempt immediately.
+
     Returns:
         Tuple[bool, str]: (Success status, human-readable status/error message)
     """
-    _ensure_session_timeout()
+    _ensure_session_timeout(timeout=timeout)
 
     kitsu_url = (url if url is not None else SettingsService.get_kitsu_url()).strip()
     kitsu_email = (email if email is not None else SettingsService.get_kitsu_email()).strip()
     kitsu_password = password if password is not None else SettingsService.get_kitsu_password()
 
-    if not kitsu_url:
-        msg = "Kitsu URL is empty."
-        logger.warning(msg)
+    # 1. Skip immediately if any configuration field is empty
+    if not kitsu_url or not kitsu_email or not kitsu_password:
+        msg = "Kitsu configuration is incomplete or empty. Skipping connection."
+        logger.info(msg)
         return False, msg
 
     kitsu_url = kitsu_url.rstrip("/")
@@ -60,11 +88,6 @@ def init_kitsu(
         gazu.set_host(kitsu_url)
     except Exception as e:
         msg = f"Failed to set Kitsu host '{kitsu_url}': {e}"
-        logger.error(msg)
-        return False, msg
-
-    if not kitsu_email or not kitsu_password:
-        msg = "Kitsu host configured, but email or password is missing."
         logger.warning(msg)
         return False, msg
 
