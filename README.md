@@ -108,6 +108,7 @@ Detailed architectural and workflow guides are available in the [`docs/`](docs/)
 2. **[Development Workflow & Cookbook](docs/DEVELOPMENT_WORKFLOW.md)**: Step-by-step UI creation guide, compiler usage, and AppImage building.
 3. **[File Locking & Version History System](docs/LOCK_AND_VERSION_SYSTEM.md)**: Cooperative application locks, Kitsu identity tracking, and audit trails.
 4. **[Pipeline Features & Batch Execution Guide](docs/PIPELINE_FEATURES_AND_BATCH_EXECUTION.md)**: Dynamic pipeline discovery, `@register_feature`, incremental versioning (`Up Version`), master publish (`Up Master`), and multi-select batch processing.
+5. **[Complete Developer & Pipeline Manual](docs/FULL_DEVELOPER_GUIDE.md)**: End-to-end instructions for modifying desktop codebase, creating UI screens, adding custom DCC features, and NAS deployment.
 
 
 ---

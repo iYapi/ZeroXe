@@ -31,3 +31,9 @@ Welcome to the **ZeroXe** project documentation.
    - Multi-select batch execution workflow
    - NAS deployment and CLI commands
 
+5. **[Complete Developer & Pipeline Manual](file:///home/iyapi/Documents/Project/2026/remake/ZeroXe/docs/FULL_DEVELOPER_GUIDE.md)**
+   - End-to-end guide for modifying desktop codebase (`src/zeroxe/`) and pipeline (`pipeline/`)
+   - Creating UI components, views, controllers, and services
+   - Step-by-step adding custom features with `@register_feature`
+   - Cooperative locks, path resolvers, presets, and NAS deployment
+
