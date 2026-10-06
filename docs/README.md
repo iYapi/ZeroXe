@@ -24,3 +24,10 @@ Welcome to the **ZeroXe** project documentation.
    - Process monitoring & auto-unlock on DCC exit
    - Force unlock mechanism & CLI reference
 
+4. **[Pipeline Features & Batch Execution Guide](file:///home/iyapi/Documents/Project/2026/remake/ZeroXe/docs/PIPELINE_FEATURES_AND_BATCH_EXECUTION.md)**
+   - Dynamic `@register_feature` pipeline discovery
+   - Incremental versioning (`Up Version`) and publish (`Up Master`)
+   - Strict per-project feature scoping via `zeroxe_map.yaml`
+   - Multi-select batch execution workflow
+   - NAS deployment and CLI commands
+
