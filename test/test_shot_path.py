@@ -32,10 +32,8 @@ def create_dynamic_test_environment(base_dir: Path) -> Path:
 
     # Copy pipeline scripts to external directory to simulate external NAS/drive
     repo_pipeline = REPO_ROOT / "pipeline"
-    if (repo_pipeline / "Commands" / "main.py").is_file():
-        shutil.copy2(repo_pipeline / "Commands" / "main.py", ext_commands / "main.py")
-        shutil.copy2(repo_pipeline / "Commands" / "Paths" / "shot_path_generator.py", ext_paths / "shot_path_generator.py")
-        shutil.copy2(repo_pipeline / "Commands" / "Paths" / "__init__.py", ext_paths / "__init__.py")
+    if (repo_pipeline / "Commands").is_dir():
+        shutil.copytree(repo_pipeline / "Commands", ext_commands, dirs_exist_ok=True)
 
     # Create dynamic pipeline.yaml
     pipeline_yaml_path = ext_pipeline_dir / "pipeline.yaml"

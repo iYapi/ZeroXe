@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PySide6.QtCore import QObject, QProcess, Qt
 from PySide6.QtGui import QStandardItem
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QAbstractItemView, QMessageBox
 
 from zeroxe.models.asset_model import Asset, AssetType
 from zeroxe.models.department_model import Department
@@ -90,9 +90,25 @@ class LauncherController(QObject):
         ui.listView_version.selectionModel().currentChanged.connect(self.on_version_selected)
 
         # Action buttons
-        ui.pushButton.clicked.connect(self.on_execute_action)
+        exec_btn = getattr(ui, "pushButton_execute", getattr(ui, "pushButton", None))
+        if exec_btn:
+            exec_btn.clicked.connect(self.on_execute_action)
         ui.pushButton_open.clicked.connect(self.on_open_path)
         ui.pushButton_unlock.clicked.connect(self.on_unlock_task)
+
+        # Multi-select checkbox
+        multi_cb = getattr(ui, "checkBox_multiSelect", getattr(ui, "comboBox_multiSelect", None))
+        if multi_cb:
+            multi_cb.toggled.connect(self.on_multi_select_toggled)
+
+    def on_multi_select_toggled(self, checked: bool) -> None:
+        """Toggle single vs extended multi-selection mode on the shot/asset list view."""
+        mode = (
+            QAbstractItemView.SelectionMode.ExtendedSelection
+            if checked
+            else QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.view.ui.listView_assetList.setSelectionMode(mode)
 
     # ------------------------------------------------------------------
     # Data Loading
@@ -100,16 +116,47 @@ class LauncherController(QObject):
     def on_settings_updated(self) -> None:
         """Handle live configuration updates from Settings view."""
         PipelineService.clear_cache()
+        self.refresh_features()
         if self.current_shot or self.current_asset:
             self.refresh_versions()
         else:
             self.load_initial_data()
 
+    @property
+    def feature_combobox(self):
+        """Retrieve the action / feature combo box widget."""
+        return getattr(self.view.ui, "comboBox_feature", getattr(self.view.ui, "comboBox", None))
+
+    def refresh_features(self) -> None:
+        """Dynamically query and populate available pipeline features from pipeline module/config."""
+        combo = self.feature_combobox
+        if not combo:
+            return
+
+        dept_name = self.current_department.name if self.current_department else ""
+        proj_name = self.current_project.name if self.current_project else None
+
+        try:
+            features = PipelineService.list_features(department=dept_name, project_name=proj_name)
+        except Exception as e:
+            logger.warning(f"Could not list pipeline features: {e}")
+            features = []
+
+        current_choice = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        if features:
+            combo.addItems(features)
+            if current_choice and current_choice in features:
+                combo.setCurrentText(current_choice)
+            else:
+                combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+
     def load_initial_data(self) -> None:
         """Populate initial dropdowns, actions, departments, and project list."""
-        # 1. Action Dropdown
-        self.view.ui.comboBox.clear()
-        self.view.ui.comboBox.addItems(["Launch Blender", "Launch PureRef", "Open Explorer"])
+        # 1. Pipeline Action / Feature Dropdown (dynamically discovered)
+        self.refresh_features()
 
         # 2. Load Departments
         self.load_departments()
@@ -431,6 +478,7 @@ class LauncherController(QObject):
         self.current_project = current.data(Qt.ItemDataRole.UserRole)
         self.view.ui.label_project.setText(f"Project: {self.current_project.name}")
 
+        self.refresh_features()
         self.load_categories(self.current_project.id)
         self.load_items()
 
@@ -442,6 +490,7 @@ class LauncherController(QObject):
         dept_name = self.current_department.name if self.current_department else ""
         self.view.ui.label_department.setText(f"Department: {dept_name}")
 
+        self.refresh_features()
         # Refresh version list for newly selected department if item is active
         if self.current_shot or self.current_asset:
             self.refresh_versions()
@@ -610,33 +659,230 @@ class LauncherController(QObject):
         self.update_metadata_table()
 
     def on_execute_action(self) -> None:
-        """Execute selected software action (e.g. Launch Blender or PureRef)."""
-        action = self.view.ui.comboBox.currentText()
-        if "Blender" in action:
-            self.on_open_path()
-        elif "PureRef" in action:
-            pureref_path = SettingsService.get_pureref_path()
-            if not pureref_path or not Path(pureref_path).exists():
-                QMessageBox.warning(
-                    self.view,
-                    "PureRef Not Configured",
-                    "PureRef executable path is missing. Please configure it in Settings.",
-                )
-                return
-            try:
-                subprocess.Popen([pureref_path])
-            except Exception as e:
-                QMessageBox.critical(self.view, "Launch Error", f"Failed to launch PureRef: {e}")
-        else:
-            item_name = (
-                self.current_shot.name
-                if self.current_shot
-                else (self.current_asset.name if self.current_asset else "None")
-            )
-            QMessageBox.information(
+        """Execute selected pipeline action (single or batch across multiple selected shots/assets)."""
+        combo = self.feature_combobox
+        action = combo.currentText() if combo else ""
+        if not action:
+            return
+
+        active_blender = SettingsService.get_active_blender()
+        if not active_blender or not Path(active_blender).is_file():
+            QMessageBox.warning(
                 self.view,
-                "Execute Action",
-                f"Action '{action}' executed for item: {item_name} ({self.current_version})",
+                "Blender Not Configured",
+                "Blender executable path is missing or invalid. Please configure it in Settings -> Software.",
+            )
+            return
+
+        proj_name = self.current_project.name if self.current_project else None
+        dept_name = self.current_department.name if self.current_department else ""
+
+        # Check multi-select mode and gather selected items from list
+        multi_cb = getattr(self.view.ui, "checkBox_multiSelect", getattr(self.view.ui, "comboBox_multiSelect", None))
+        is_multi = multi_cb.isChecked() if multi_cb else False
+
+        selected_indexes = self.view.ui.listView_assetList.selectionModel().selectedIndexes()
+        selected_items = []
+        for idx in selected_indexes:
+            source_idx = self.view.item_proxy_model.mapToSource(idx)
+            item_data = source_idx.data(Qt.ItemDataRole.UserRole)
+            if item_data and item_data not in selected_items:
+                selected_items.append(item_data)
+
+        # ------------------------------------------------------------------
+        # A. Batch Execution (Multiple items selected)
+        # ------------------------------------------------------------------
+        if is_multi and len(selected_items) > 1:
+            reply = QMessageBox.question(
+                self.view,
+                f"Confirm Batch {action}",
+                f"You have selected {len(selected_items)} items.\n\n"
+                f"Do you want to execute '{action}' on all {len(selected_items)} items in batch?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+            success_list = []
+            failed_list = []
+
+            for item in selected_items:
+                try:
+                    target_filepath = None
+                    item_key = None
+                    item_label = ""
+
+                    if isinstance(item, Shot):
+                        ep = item.episode or self.view.ui.comboBox_category.currentText()
+                        sq = item.sequence or ""
+                        sh = item.name
+                        item_label = f"{sq}_{sh}" if sq else sh
+
+                        shot_res = PipelineService.resolve_shot(
+                            department=dept_name,
+                            episode=ep,
+                            sequence=sq,
+                            shot=sh,
+                            project_name=proj_name,
+                        )
+                        versions = PipelineService.list_versions(
+                            department=dept_name,
+                            episode=ep,
+                            sequence=sq,
+                            shot=sh,
+                            project_name=proj_name,
+                        )
+                        target_filepath = str(versions[-1][1]) if versions else str(shot_res.master_path)
+                        item_key = LockService.build_entity_key(
+                            department=dept_name,
+                            episode=ep,
+                            sequence=sq,
+                            shot=sh,
+                            project_name=proj_name,
+                        )
+
+                    elif isinstance(item, Asset):
+                        at_type = item.asset_type or self.view.ui.comboBox_category.currentText()
+                        asset_name = item.name
+                        item_label = asset_name
+
+                        asset_res = PipelineService.resolve_asset(
+                            asset_type=at_type,
+                            asset_name=asset_name,
+                            department=dept_name,
+                            project_name=proj_name,
+                        )
+                        versions = PipelineService.list_asset_versions(
+                            asset_type=at_type,
+                            asset_name=asset_name,
+                            department=dept_name,
+                            project_name=proj_name,
+                        )
+                        target_filepath = str(versions[-1][1]) if versions else str(asset_res.master_path)
+                        item_key = f"asset_{asset_name}_{dept_name}".lower().replace(" ", "_")
+
+                    if not target_filepath:
+                        failed_list.append((item_label, "Could not resolve file path."))
+                        continue
+
+                    # Execute pipeline feature
+                    success, msg, target_path = PipelineService.execute_feature(
+                        feature_name=action,
+                        filepath=target_filepath,
+                        department=dept_name,
+                        project_name=proj_name,
+                    )
+
+                    if success:
+                        success_list.append((item_label, target_path or msg))
+                        # Record in history/audit log
+                        if item_key and target_path:
+                            try:
+                                ver_name = "Master" if "master" in action.lower() else Path(target_path).stem.split("_")[-1]
+                                file_size_mb = 0.0
+                                if Path(target_path).is_file():
+                                    file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2)
+
+                                LockService.record_version(
+                                    entity_key=item_key,
+                                    version=ver_name,
+                                    file_path=str(target_path),
+                                    comment=f"Batch execution: {action}",
+                                    file_size_mb=file_size_mb,
+                                    project_name=proj_name,
+                                )
+                            except Exception as ex:
+                                logger.warning(f"Could not record version history for {item_label}: {ex}")
+                    else:
+                        failed_list.append((item_label, msg))
+
+                except Exception as ex:
+                    failed_list.append((getattr(item, "name", "Unknown"), str(ex)))
+
+            # Refresh view after batch
+            self.refresh_versions()
+            self.update_metadata_table()
+
+            # Present summary
+            summary = [
+                f"Batch execution for '{action}' finished:",
+                f"• Total Processed: {len(selected_items)}",
+                f"• Successful: {len(success_list)}",
+                f"• Failed: {len(failed_list)}",
+            ]
+            if failed_list:
+                summary.append("\nErrors:")
+                for l, err in failed_list:
+                    summary.append(f"  - {l}: {err}")
+                QMessageBox.warning(self.view, f"Batch {action} Results", "\n".join(summary))
+            else:
+                QMessageBox.information(self.view, f"Batch {action} Complete", "\n".join(summary))
+            return
+
+        # ------------------------------------------------------------------
+        # B. Single Item Execution
+        # ------------------------------------------------------------------
+        if not self.selected_file_path or self.current_version == "Pipeline Error":
+            QMessageBox.warning(
+                self.view,
+                "No File Selected",
+                "Please select a valid shot or asset version to perform this pipeline action.",
+            )
+            return
+
+        entity_key = self.get_current_entity_key()
+
+        try:
+            success, msg, target_path = PipelineService.execute_feature(
+                feature_name=action,
+                filepath=self.selected_file_path,
+                department=dept_name,
+                project_name=proj_name,
+            )
+
+            if success:
+                # Refresh versions and metadata
+                self.refresh_versions()
+                self.update_metadata_table()
+
+                # Record version in audit log if target path exists
+                if entity_key and target_path:
+                    try:
+                        ver_name = "Master" if "master" in action.lower() else Path(target_path).stem.split("_")[-1]
+                        file_size_mb = 0.0
+                        if Path(target_path).is_file():
+                            file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2)
+
+                        LockService.record_version(
+                            entity_key=entity_key,
+                            version=ver_name,
+                            file_path=str(target_path),
+                            comment=f"Automated execution: {action}",
+                            file_size_mb=file_size_mb,
+                            project_name=proj_name,
+                        )
+                    except Exception as ex:
+                        logger.warning(f"Failed to record version history: {ex}")
+
+                QMessageBox.information(
+                    self.view,
+                    f"{action} Complete",
+                    msg or f"Successfully executed '{action}'",
+                )
+            else:
+                QMessageBox.critical(
+                    self.view,
+                    f"{action} Failed",
+                    msg or f"Failed to execute '{action}'",
+                )
+
+        except Exception as e:
+            logger.error(f"Error executing feature '{action}': {e}")
+            QMessageBox.critical(
+                self.view,
+                f"{action} Error",
+                f"An error occurred while executing '{action}':\n\n{e}",
             )
 
     def on_open_path(self) -> None:

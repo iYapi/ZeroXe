@@ -20,44 +20,100 @@ for _p in [str(_pipeline_root), str(_current_dir)]:
 
 try:
     from Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
-    from Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
-except ImportError:
+except Exception:
     try:
         from Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
-        from Commands.Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
-    except ImportError:
+    except Exception:
         try:
             from pipeline.Commands.Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
+        except Exception:
+            ShotPathGenerator = None
+            ShotPathResult = None
+
+try:
+    from Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
+except Exception:
+    try:
+        from Commands.Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
+    except Exception:
+        try:
             from pipeline.Commands.Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
-        except ImportError:
-            from .Paths.shot_path_generator import ShotPathGenerator, ShotPathResult
-            from .Paths.asset_path_generator import AssetPathGenerator, AssetPathResult
+        except Exception:
+            AssetPathGenerator = None
+            AssetPathResult = None
 
 try:
     from Locks.lock_manager import LockManager
-except ImportError:
+except Exception:
     try:
         from Commands.Locks.lock_manager import LockManager
-    except ImportError:
+    except Exception:
         try:
             from pipeline.Commands.Locks.lock_manager import LockManager
-        except ImportError:
-            from .Locks.lock_manager import LockManager
+        except Exception:
+            LockManager = None
+
+try:
+    from versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+except Exception:
+    try:
+        from Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+    except Exception:
+        try:
+            from pipeline.Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+        except Exception:
+            VersioningSystem = None
+            get_master_path = None
+            get_next_version_path = None
+            up_master = None
+            up_version = None
+
+try:
+    from feature_registry import (
+        PipelineFeatureResult,
+        execute_feature,
+        list_available_features,
+        register_feature,
+    )
+except Exception:
+    try:
+        from Commands.feature_registry import (
+            PipelineFeatureResult,
+            execute_feature,
+            list_available_features,
+            register_feature,
+        )
+    except Exception:
+        try:
+            from pipeline.Commands.feature_registry import (
+                PipelineFeatureResult,
+                execute_feature,
+                list_available_features,
+                register_feature,
+            )
+        except Exception:
+            PipelineFeatureResult = None
+            execute_feature = None
+            list_available_features = None
+            register_feature = None
 
 # Default pipeline configuration location (relative to this Commands folder)
 DEFAULT_PIPELINE_YAML = _pipeline_root / "pipeline.yaml"
 
-_GENERATOR_CACHE: Dict[str, ShotPathGenerator] = {}
-_ASSET_GENERATOR_CACHE: Dict[str, AssetPathGenerator] = {}
-_LOCK_MANAGER_CACHE: Dict[str, LockManager] = {}
+_GENERATOR_CACHE: Dict[str, Any] = {}
+_ASSET_GENERATOR_CACHE: Dict[str, Any] = {}
+_LOCK_MANAGER_CACHE: Dict[str, Any] = {}
 
 
-def get_generator(config_path: Optional[Union[str, Path]] = None) -> ShotPathGenerator:
+def get_generator(config_path: Optional[Union[str, Path]] = None) -> Any:
     """Create or return cached ShotPathGenerator initialized with pipeline.yaml."""
     cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
     key = str(cfg.resolve())
     if key not in _GENERATOR_CACHE:
+        if ShotPathGenerator is None:
+            raise ImportError("ShotPathGenerator module could not be loaded.")
         _GENERATOR_CACHE[key] = ShotPathGenerator(config=cfg)
+    return _GENERATOR_CACHE[key]
     return _GENERATOR_CACHE[key]
 
 
@@ -375,6 +431,110 @@ def get_history(
 
 
 # ==============================================================================
+# Versioning and Up Version / Up Master APIs
+# ==============================================================================
+def resolve_master_path(filepath: Union[str, Path]) -> str:
+    """Resolve master path for a given DCC file path."""
+    if get_master_path:
+        return get_master_path(filepath)
+    from versioning import VersioningSystem
+    return VersioningSystem.get_master_path(filepath)
+
+
+def resolve_next_version_path(
+    filepath: Union[str, Path],
+    version_folder: str = "progress",
+) -> str:
+    """Resolve next incremental version path for a given DCC file path."""
+    if get_next_version_path:
+        return get_next_version_path(filepath, version_folder=version_folder)
+    from versioning import VersioningSystem
+    return VersioningSystem.get_next_version_path(filepath, version_folder=version_folder)
+
+
+def generate_up_version_script(filepath: str) -> Tuple[str, str]:
+    """Generate Blender script and version path for Up Version action."""
+    if up_version:
+        return up_version(filepath)
+    from versioning import VersioningSystem
+    return VersioningSystem.up_version(filepath)
+
+
+def generate_up_master_script(
+    filepath: str,
+    setting_data: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    """Generate Blender script and master path for Up Master action."""
+    if up_master:
+        return up_master(filepath, setting_data=setting_data)
+    from versioning import VersioningSystem
+    return VersioningSystem.up_master(filepath, setting_data=setting_data)
+
+
+# ==============================================================================
+# Dynamic Pipeline Features Discovery and Dispatch APIs
+# ==============================================================================
+def list_features(
+    department: Optional[str] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+) -> List[str]:
+    """Dynamically list all available pipeline features for the department and project."""
+    cfg = config_path or DEFAULT_PIPELINE_YAML
+    if list_available_features:
+        return list_available_features(
+            department=department,
+            config_path=cfg,
+            project_path=project_path,
+        )
+    return ["Up Version", "Up Master"]
+
+
+def run_pipeline_feature(
+    feature_name: str,
+    filepath: str,
+    department: Optional[str] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    setting_data: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> Any:
+    """Execute a registered pipeline feature dynamically."""
+    cfg = config_path or DEFAULT_PIPELINE_YAML
+    if execute_feature:
+        return execute_feature(
+            feature_name=feature_name,
+            filepath=filepath,
+            department=department,
+            config_path=cfg,
+            project_path=project_path,
+            setting_data=setting_data,
+            **kwargs,
+        )
+
+    # Fallback to direct handlers
+    clean_name = feature_name.lower().replace("_", " ")
+    if clean_name in ("up version", "up_version"):
+        script, ver_path = generate_up_version_script(filepath)
+        return {
+            "success": True,
+            "message": f"Generated Up Version for {ver_path}",
+            "target_path": ver_path,
+            "script": script,
+        }
+    elif clean_name in ("up master", "up_master"):
+        script, mst_path = generate_up_master_script(filepath, setting_data=setting_data)
+        return {
+            "success": True,
+            "message": f"Generated Up Master for {mst_path}",
+            "target_path": mst_path,
+            "script": script,
+        }
+
+    return {"success": False, "message": f"Feature '{feature_name}' not recognized."}
+
+
+# ==============================================================================
 # CLI Interface
 # ==============================================================================
 def main() -> None:
@@ -382,6 +542,30 @@ def main() -> None:
     parser.add_argument("--config", "-c", type=Path, default=None, help="Path to pipeline.yaml")
 
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
+
+    # list-features command
+    list_feat_parser = subparsers.add_parser("list-features", help="List all available pipeline features")
+    list_feat_parser.add_argument("--dept", "-d", default="", help="Filter by department (e.g. Animation)")
+    list_feat_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # execute-feature command
+    exec_feat_parser = subparsers.add_parser("execute-feature", help="Execute a pipeline feature dynamically")
+    exec_feat_parser.add_argument("--name", "-n", required=True, help="Feature name (e.g. 'Up Version', 'Up Master')")
+    exec_feat_parser.add_argument("--file", "-f", required=True, help="Input DCC file path")
+    exec_feat_parser.add_argument("--dept", "-d", default="", help="Department name")
+    exec_feat_parser.add_argument("--preset", "-p", default="", help="Path to preset python script")
+    exec_feat_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # up-version command
+    up_ver_parser = subparsers.add_parser("up-version", help="Generate Up Version script for a DCC file")
+    up_ver_parser.add_argument("--file", "-f", required=True, help="Input DCC file path")
+    up_ver_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # up-master command
+    up_mst_parser = subparsers.add_parser("up-master", help="Generate Up Master script for a DCC file")
+    up_mst_parser.add_argument("--file", "-f", required=True, help="Input DCC file path")
+    up_mst_parser.add_argument("--preset", "-p", default="", help="Path to preset python script to embed")
+    up_mst_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # shot-path command
     shot_parser = subparsers.add_parser("shot-path", help="Resolve master and version paths for a shot")
@@ -413,7 +597,59 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == "shot-path":
+    if args.command == "list-features":
+        features = list_features(department=args.dept, config_path=args.config)
+        if args.json:
+            print(json.dumps({"features": features}, indent=2))
+        else:
+            print("Available Pipeline Features:")
+            for f in features:
+                print(f" - {f}")
+
+    elif args.command == "execute-feature":
+        setting_data = {"script": args.preset} if args.preset else None
+        res = run_pipeline_feature(
+            feature_name=args.name,
+            filepath=args.file,
+            department=args.dept,
+            config_path=args.config,
+            setting_data=setting_data,
+        )
+        if hasattr(res, "success"):
+            output = {
+                "success": res.success,
+                "message": res.message,
+                "target_path": res.target_path,
+                "script": res.script,
+            }
+        elif isinstance(res, dict):
+            output = res
+        else:
+            output = {"result": str(res)}
+
+        if args.json:
+            print(json.dumps(output, indent=2))
+        else:
+            print(f"Result: {output}")
+
+    elif args.command == "up-version":
+        script, version_path = generate_up_version_script(args.file)
+        if args.json:
+            print(json.dumps({"version_path": version_path, "script": script}, indent=2))
+        else:
+            print(f"Target Version Path: {version_path}")
+            print("Generated Script:\n" + script)
+
+    elif args.command == "up-master":
+        setting_data = {"script": args.preset} if args.preset else None
+        script, master_path = generate_up_master_script(args.file, setting_data=setting_data)
+        if args.json:
+            print(json.dumps({"master_path": master_path, "script": script}, indent=2))
+        else:
+            print(f"Target Master Path: {master_path}")
+            print("Generated Script:\n" + script)
+
+    elif args.command == "shot-path":
         result = resolve_shot_paths(
             department=args.dept,
             episode=args.ep,

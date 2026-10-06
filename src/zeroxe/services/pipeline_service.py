@@ -14,12 +14,22 @@ from dataclasses import dataclass
 import importlib.util
 import logging
 from pathlib import Path
+import re
+from string import Template
+import subprocess
 import sys
+import tempfile
+from textwrap import dedent
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import yaml
 
 from zeroxe.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
+
+
+
+
 
 
 @dataclass
@@ -156,12 +166,15 @@ class PipelineService:
             logger.warning("No projects defined in zeroxe_map.yaml.")
             return None
 
-        # 1. Match specifically requested project if provided
+        # 1. Match specifically requested project (by key, code, or name)
         if project_name:
             if project_name in projects and isinstance(projects[project_name], dict):
                 pipe_path = projects[project_name].get("pipeline_path")
                 if pipe_path and Path(pipe_path).is_file():
                     return Path(pipe_path)
+                elif pipe_path:
+                    logger.warning(f"Project '{project_name}' pipeline_path does not exist: {pipe_path}")
+                    return None
 
             target_lower = project_name.lower()
             for p_key, p_info in projects.items():
@@ -174,17 +187,22 @@ class PipelineService:
                         pipe_path = p_info.get("pipeline_path")
                         if pipe_path and Path(pipe_path).is_file():
                             return Path(pipe_path)
+                        elif pipe_path:
+                            logger.warning(f"Project '{project_name}' pipeline_path does not exist: {pipe_path}")
+                            return None
 
-        # 2. Match first configured project with valid pipeline_path
+            logger.info(
+                f"No pipeline configuration found in zeroxe_map.yaml for project: '{project_name}'."
+            )
+            return None
+
+        # 2. If project_name is None, match first configured project with valid pipeline_path (for shot/asset path fallback)
         for p_info in projects.values():
             if isinstance(p_info, dict):
                 pipe_path = p_info.get("pipeline_path")
                 if pipe_path and Path(pipe_path).is_file():
                     return Path(pipe_path)
 
-        logger.warning(
-            f"No valid pipeline_path found in zeroxe_map.yaml for project: '{project_name}'."
-        )
         return None
 
     @classmethod
@@ -642,5 +660,217 @@ class PipelineService:
 
         reason = cls._get_pipeline_error_reason(project_name=project_name)
         raise FileNotFoundError(reason)
+
+    # --------------------------------------------------------------------------
+    # Versioning and Up Version / Up Master DCC Automation
+    # --------------------------------------------------------------------------
+    @classmethod
+    def get_department_script(
+        cls,
+        department: str,
+        script_key: str = "up_master",
+        project_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Look up configured script preset path for a department in pipeline.yaml."""
+        pipe_yaml = cls.get_active_pipeline_yaml_path(project_name=project_name)
+        if not pipe_yaml or not pipe_yaml.is_file():
+            return None
+
+        try:
+            with open(pipe_yaml, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+
+            departments = cfg.get("departments", {})
+            dept_info = departments.get(department)
+            if not dept_info:
+                # Case-insensitive / code lookup
+                for d_name, d_val in departments.items():
+                    if isinstance(d_val, dict):
+                        if (
+                            d_name.lower() == department.lower()
+                            or d_val.get("code", "").lower() == department.lower()
+                        ):
+                            dept_info = d_val
+                            break
+
+            if not dept_info or not isinstance(dept_info, dict):
+                return None
+
+            scripts = dept_info.get("scripts", {})
+            if not scripts or not isinstance(scripts, dict):
+                return None
+
+            raw_path = scripts.get(script_key)
+            if not raw_path:
+                return None
+
+            # Resolve project mount path
+            global_cfg = cfg.get("global", {})
+            mounts = global_cfg.get("mounts", {})
+            if sys.platform.startswith("linux"):
+                proj_root = mounts.get("linux", "")
+            elif sys.platform.startswith("win32"):
+                proj_root = mounts.get("windows", "")
+            elif sys.platform.startswith("darwin"):
+                proj_root = mounts.get("darwin", "")
+            else:
+                proj_root = mounts.get("linux", "")
+
+            resolved_path = raw_path.replace("@project_path@", proj_root.rstrip("/\\"))
+            return resolved_path
+        except Exception as e:
+            logger.warning(f"Failed to read department script from {pipe_yaml}: {e}")
+            return None
+
+    @classmethod
+    def execute_blender_script(
+        cls,
+        script: str,
+        blender_path: Optional[str] = None,
+        timeout: int = 180,
+    ) -> Tuple[bool, str]:
+        """Execute a Python script in background headless Blender instance.
+
+        Returns (success: bool, output_log: str).
+        """
+        active_blender = blender_path or SettingsService.get_active_blender()
+        if not active_blender or not Path(active_blender).is_file():
+            return False, "Blender executable path is not configured or does not exist."
+
+        tmp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".py", delete=False, encoding="utf-8"
+            ) as f:
+                f.write(script)
+                tmp_file = Path(f.name)
+
+            proc = subprocess.run(
+                [active_blender, "-b", "--python", str(tmp_file)],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+
+            output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
+            success = (proc.returncode == 0)
+            return success, output
+        except subprocess.TimeoutExpired:
+            return False, f"Blender execution timed out after {timeout} seconds."
+        except Exception as e:
+            return False, f"Failed to execute Blender script: {e}"
+        finally:
+            if tmp_file and tmp_file.is_file():
+                try:
+                    tmp_file.unlink()
+                except Exception:
+                    pass
+
+    @classmethod
+    def list_features(
+        cls,
+        department: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> List[str]:
+        """Dynamically query all available features strictly for the given project from external pipeline."""
+        if not project_name:
+            return []
+
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+        if not config_path:
+            return []
+
+        module = cls.load_pipeline_module(project_name=project_name)
+
+        if module and hasattr(module, "list_features"):
+            try:
+                features = module.list_features(department=department, config_path=config_path)
+                if features:
+                    return list(features)
+            except Exception as e:
+                logger.warning(f"External module list_features failed: {e}")
+
+        if module and hasattr(module, "list_available_features"):
+            try:
+                features = module.list_available_features(department=department, config_path=config_path)
+                if features:
+                    return list(features)
+            except Exception as e:
+                logger.warning(f"External module list_available_features failed: {e}")
+
+        return []
+
+    @classmethod
+    def execute_feature(
+        cls,
+        feature_name: str,
+        filepath: str,
+        department: Optional[str] = None,
+        project_name: Optional[str] = None,
+        setting_data: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Send feature execution request directly to the external pipeline loaded via zeroxe_map.yaml.
+
+        Returns (success: bool, message: str, target_path: Optional[str]).
+        """
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+        module = cls.load_pipeline_module(project_name=project_name)
+
+        if not module:
+            err = cls._get_pipeline_error_reason(project_name=project_name)
+            return False, f"External pipeline module not loaded: {err}", None
+
+        result = None
+        if hasattr(module, "run_pipeline_feature"):
+            try:
+                result = module.run_pipeline_feature(
+                    feature_name=feature_name,
+                    filepath=filepath,
+                    department=department,
+                    config_path=config_path,
+                    setting_data=setting_data,
+                    **kwargs,
+                )
+            except Exception as e:
+                logger.warning(f"External module run_pipeline_feature error: {e}")
+
+        if result is None and hasattr(module, "execute_feature"):
+            try:
+                result = module.execute_feature(
+                    feature_name=feature_name,
+                    filepath=filepath,
+                    department=department,
+                    config_path=config_path,
+                    setting_data=setting_data,
+                    **kwargs,
+                )
+            except Exception as e:
+                logger.warning(f"External module execute_feature error: {e}")
+
+        if result is None:
+            return False, f"Feature '{feature_name}' could not be executed by the external pipeline.", None
+
+        script = getattr(result, "script", None) if hasattr(result, "script") else (result.get("script") if isinstance(result, dict) else None)
+        target_path = getattr(result, "target_path", None) if hasattr(result, "target_path") else (result.get("target_path") if isinstance(result, dict) else None)
+        is_success = getattr(result, "success", True) if hasattr(result, "success") else (result.get("success", True) if isinstance(result, dict) else True)
+        msg = getattr(result, "message", "") if hasattr(result, "message") else (result.get("message", "") if isinstance(result, dict) else "")
+
+        if not is_success:
+            return False, msg or f"Pipeline feature '{feature_name}' returned failure.", target_path
+
+        # If pipeline generated a DCC script, execute it headlessly via Blender
+        if script:
+            if target_path:
+                Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+
+            dcc_success, dcc_output = cls.execute_blender_script(script)
+            if not dcc_success:
+                return False, f"DCC execution failed:\n\n{dcc_output}", target_path
+
+            return True, msg or f"Successfully executed '{feature_name}'", target_path
+
+        # If feature was executed completely within pipeline
+        return is_success, msg or f"Successfully executed '{feature_name}'", target_path
 
 

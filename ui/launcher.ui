@@ -108,17 +108,17 @@
        <item>
         <layout class="QGridLayout" name="gridLayout_3">
          <item row="1" column="0">
-          <widget class="QComboBox" name="comboBox"/>
+          <widget class="QComboBox" name="comboBox_feature"/>
          </item>
          <item row="0" column="0">
-          <widget class="QCheckBox" name="checkBox">
+          <widget class="QCheckBox" name="checkBox_multiSelect">
            <property name="text">
             <string>Multiple</string>
            </property>
           </widget>
          </item>
          <item row="2" column="0">
-          <widget class="QPushButton" name="pushButton">
+          <widget class="QPushButton" name="pushButton_execute">
            <property name="text">
             <string>Execute</string>
            </property>
