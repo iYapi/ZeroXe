@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "name": "Playblast Preset MDT",
+    "created": "2026-06-24T01:26:00.000000",
+    "blender_version": "4.5.0"
+  },
+  "settings": {
+    "use_simplify": true,
+    "simplify_subdivision": 1,
+    "simplify_child_particles": 0,
+    "resolution_x": 2560,
+    "resolution_y": 1080,
+    "resolution_percentage": 85,
+    "use_border": false,
+    "fps": 24,
+    "filepath": "path output shot",
+    "metadata_input": "SCENE",
+    "use_stamp": true,
+    "use_stamp_date": true,
+    "use_stamp_time": false,
+    "use_stamp_render_time": false,
+    "use_stamp_frame": true,
+    "use_stamp_frame_range": false,
+    "use_stamp_memory": false,
+    "use_stamp_hostname": false,
+    "use_stamp_camera": false,
+    "use_stamp_lens": true,
+    "use_stamp_scene": false,
+    "use_stamp_marker": false,
+    "use_stamp_filename": false,
+    "use_stamp_sequencer_strip": false,
+    "use_stamp_note": true,
+    "stamp_font_size": 13,
+    "stamp_foreground": [
+      0.799238,
+      0.715663,
+      0,
+      1
+    ],
+    "stamp_background": [
+      0,
+      0,
+      0,
+      0.15
+    ],
+    "stamp_note_text": "Nama File blender",
+    "image_settings.file_format": "FFMPEG",
+    "ffmpeg.format": "QUICKTIME",
+    "ffmpeg.codec": "PRORES",
+    "ffmpeg.audio_codec": "AAC"
+  }
+}

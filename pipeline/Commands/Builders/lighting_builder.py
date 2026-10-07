@@ -1,48 +1,112 @@
+import os
 import sys
 import json
 from pathlib import Path
 from textwrap import dedent
 from string import Template
+from typing import Any, Dict, List, Optional
+
+
+def _get_lighting_dialog_class():
+    """Dynamically resolve and import LightingAssetDialog under any execution environment."""
+    try:
+        from .lighting_dialog import LightingAssetDialog
+        return LightingAssetDialog
+    except Exception:
+        pass
+
+    for mod_name in [
+        "pipeline.Commands.Builders.lighting_dialog",
+        "Commands.Builders.lighting_dialog",
+        "Builders.lighting_dialog",
+        "lighting_dialog",
+    ]:
+        try:
+            mod = __import__(mod_name, fromlist=["LightingAssetDialog"])
+            if hasattr(mod, "LightingAssetDialog"):
+                return getattr(mod, "LightingAssetDialog")
+        except Exception:
+            pass
+
+    try:
+        dialog_file = Path(__file__).parent / "lighting_dialog.py"
+        if dialog_file.is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("zeroxe_lighting_dialog", str(dialog_file))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return getattr(mod, "LightingAssetDialog", None)
+    except Exception:
+        pass
+
+    return None
 
 
 class LightingBuilder:
+    """Builder for Lighting department scene generation with interactive FG/BG layer assignment."""
+
     def extract_data(
         self,
-        shot_data,
-        current_department,
-        asset_department,
-        mastershots_data,
-        addons_data,
-        filepath,
-    ):
+        shot_data: Dict[str, Any],
+        current_department: Dict[str, Any],
+        asset_department: Dict[str, Any],
+        mastershots_data: Dict[str, Any],
+        addons_data: Dict[str, Any],
+        filepath: Dict[str, str],
+        fg_assets: Optional[List[str]] = None,
+        show_ui: bool = True,
+        **kwargs: Any,
+    ) -> str:
         # Create parent folder
         Path(filepath['version']).parent.mkdir(parents=True, exist_ok=True)
         
         # Get lit mastershot path
         relative_assets = {}
         asset_types = asset_department.get("Asset", {}).get("asset_type", {})
-        shot_assets_content = shot_data.get("assets", [])
-        asset_type_map = {config["id"]: (category_key, config) for category_key, config in asset_types.items()}
+        if not asset_types and "asset_type" in asset_department:
+            asset_types = asset_department.get("asset_type", {})
+
+        shot_assets_content = shot_data.get("assets", []) or []
+        if not shot_assets_content and shot_data.get("id"):
+            try:
+                import gazu
+                shot_assets_content = gazu.asset.all_assets_for_shot(shot_data["id"]) or []
+            except Exception:
+                try:
+                    from zeroxe.services.shot_service import ShotService
+                    shot_assets_content = ShotService.get_assets_for_shot(shot_data["id"]) or []
+                except Exception:
+                    pass
+
+        asset_type_map = {
+            config["id"] if isinstance(config, dict) and "id" in config else config.get("kitsu_id", category_key): (category_key, config)
+            for category_key, config in asset_types.items()
+            if isinstance(config, dict)
+        }
         
         lit_mastershot_name = ""
         lit_mastershot_base_path = ""
 
         for asset in shot_assets_content:
+            if not isinstance(asset, dict):
+                continue
             asset_type_id = asset.get("entity_type_id")
+            asset_name = asset.get("name", "")
             if asset_type_id in asset_type_map:
                 category_key, config = asset_type_map[asset_type_id]
-                if category_key.lower() == "set":
+                if category_key.lower() == "set" or asset_name.startswith("s-"):
                     if category_key not in relative_assets:
                         relative_assets[category_key] = {
                             "assets": [],
                             "base_path": config.get("base_path"),
                             "prefix": config.get("prefix"),
-                            "code": config.get("code"),
+                            "code": config.get("code", "set"),
                         }
-                    relative_assets[category_key]["assets"].append(asset["name"])
-                elif category_key.lower().startswith("ms_"):
-                    if category_key.lower() == "ms_lit":
-                        lit_mastershot_name = asset.get("name", "")
+                    relative_assets[category_key]["assets"].append(asset_name)
+                elif category_key.lower().startswith("ms_") or asset_name.startswith("ms_") or asset_name.startswith("LIT_"):
+                    if category_key.lower() in ("ms_lit", "ms_lighting") or asset_name.startswith("LIT_"):
+                        lit_mastershot_name = asset_name
                         lit_mastershot_base_path = config.get("base_path", "")
                     if category_key in asset_types:
                         del asset_types[category_key]
@@ -51,13 +115,13 @@ class LightingBuilder:
             Path(lit_mastershot_base_path)
             / lit_mastershot_name
             / f"{lit_mastershot_name}.blend"
-        )
+        ) if lit_mastershot_base_path and lit_mastershot_name else Path("")
 
-        # Construct collection dict
+        # Construct collection dict for high-res sets
         collections_dict = {}
         for category, data in relative_assets.items():
             paths = []
-            base_dir = Path(data["base_path"])
+            base_dir = Path(data["base_path"]) if data.get("base_path") else Path("")
 
             for asset in data["assets"]:
                 filename = f"{asset}.blend"
@@ -66,26 +130,29 @@ class LightingBuilder:
                 # Convert back to string for Blender's libraries.load
                 paths.append(str(full_path))
 
-            collections_dict[data["code"]] = paths
+            collections_dict[data.get("code", "set")] = paths
 
         # Get preset
-        dept_data = next(iter(current_department.values()))
+        dept_data = next(iter(current_department.values())) if current_department else {}
         preset_name = "preset"
-        preset_path = dept_data.get("presets", {}).get(preset_name, {}).get("path")
+        preset_path = dept_data.get("presets", {}).get(preset_name, {}).get("path") if isinstance(dept_data, dict) else None
 
         # Get addon preset
         addon_preset_path = (
             addons_data.get("addons", {})
             .get("ops_blp", {})
             .get("base_path", "")
-        )
-        addon_preset_file = Path(addon_preset_path) / f"{lit_mastershot_name}.json"
+        ) if isinstance(addons_data, dict) else ""
+        addon_preset_file = (Path(addon_preset_path) / f"{lit_mastershot_name}.json") if addon_preset_path and lit_mastershot_name else Path("")
 
-        # Collection list
+        # Collection list for non-set asset categories (chr, prp, vhc, etc.)
         collection_list = [
             (config.get("code"), config.get("prefix"))
             for config in asset_types.values()
-            if config.get("code") not in ["ms", "set"] and not config.get("code", "").startswith("ms")
+            if isinstance(config, dict)
+            and config.get("code") not in ["ms", "set"]
+            and not str(config.get("code", "")).startswith("ms")
+            and config.get("prefix")
         ]
         # Add the camera entry manually
         collection_list.append(("cam", None))
@@ -120,18 +187,65 @@ class LightingBuilder:
             "frame_out": frame_out,
             "fps": fps,
             "resolution": resolution,
-            "ops_blp": str(addon_preset_file),
+            "ops_blp": str(addon_preset_file) if addon_preset_file else "",
             "script_path": preset_path,
         }
+
+        # ------------------------------------------------------------------
+        # Foreground (FG) Asset Selection (Popup UI / Configuration)
+        # ------------------------------------------------------------------
+        selected_fg = fg_assets
+        if selected_fg is None and kwargs.get("setting_data") and "fg_assets" in kwargs["setting_data"]:
+            selected_fg = kwargs["setting_data"]["fg_assets"]
+
+        import os
+        is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+        if selected_fg is None and show_ui and not is_test_env:
+            dialog_cls = _get_lighting_dialog_class()
+            if dialog_cls is not None:
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    if not app:
+                        app = QApplication(sys.argv)
+
+                    dialog = dialog_cls(
+                        shot_data=shot_data,
+                        asset_department=asset_department,
+                    )
+                    if dialog.exec():
+                        selected_fg = dialog.get_selected_fg_assets()
+                    else:
+                        raise RuntimeError("Lighting Builder generation cancelled by user.")
+                except RuntimeError:
+                    raise
+                except Exception as e:
+                    import logging
+                    logging.getLogger("ZeroXe.LightingBuilder").warning(
+                        f"Could not display LightingAssetDialog: {e}"
+                    )
+
+        if selected_fg is None:
+            # Headless default: all non-set assets in shot_data are considered FG
+            selected_fg = [
+                a.get("name")
+                for a in shot_assets_content
+                if isinstance(a, dict)
+                and a.get("name")
+                and not a.get("name", "").startswith("s-")
+                and not a.get("name", "").startswith("ms_")
+            ]
 
         lighting_script = self.script_builder(
             filepath=filepath["final"],
             version_path=filepath["version"],
-            master_file=str(lit_mastershot_file),
-            animation_file=filepath["source"],
+            master_file=str(lit_mastershot_file) if lit_mastershot_file else "",
+            animation_file=filepath.get("source", ""),
             setting_data=setting_data,
             collection_list=collection_list,
-            set_collection=collections_dict
+            set_collection=collections_dict,
+            fg_assets=selected_fg,
         )
         return lighting_script
 
@@ -143,8 +257,11 @@ class LightingBuilder:
         animation_file: str,
         setting_data: dict,
         collection_list: list,
-        set_collection: list,
-    ):
+        set_collection: dict,
+        fg_assets: Optional[List[str]] = None,
+    ) -> str:
+        clean_fg_assets = [str(a).lower().strip() for a in (fg_assets or [])]
+
         tpl = Template(
             dedent(
                 """
@@ -152,8 +269,14 @@ import bpy
 from pathlib import Path
 
 collections = $SET_COLLECTION
-							  
-bpy.ops.wm.open_mainfile(filepath="$FILEPATH")
+fg_assets = $FG_ASSETS
+collection_list = $COLLECTION_LIST
+
+master_file = "$FILEPATH"
+if master_file and Path(master_file).is_file():
+	bpy.ops.wm.open_mainfile(filepath=master_file)
+else:
+	bpy.ops.wm.read_factory_settings(use_empty=True)
 
 def _unlink_collection_from(parent, target):
 	for child in list(parent.children):
@@ -174,14 +297,26 @@ def _force_remove_collection(name: str):
 	except RuntimeError as e:
 		print(f"[WARNING] Could not remove '{name}': {e}")
 
-def ensure_parent_in_scene(name: str) -> bpy.types.Collection:
-	if name.lower() != "$CAMERA_COLLECTION".lower():
-		_force_remove_collection(name)
-		parent = bpy.data.collections.new(name)
-		bpy.context.scene.collection.children.link(parent)
-		print(f"Created and linked parent collection: {name}")
-		return parent
+def ensure_collection(name: str, parent=None) -> bpy.types.Collection:
+	coll = bpy.data.collections.get(name)
+	if not coll:
+		coll = bpy.data.collections.new(name)
+		print(f"Created collection: {name}")
+	if parent is None:
+		parent = bpy.context.scene.collection
+	if coll.name not in parent.children:
+		parent.children.link(coll)
+		print(f"Linked '{coll.name}' under '{parent.name}'")
+	return coll
 
+def is_asset_in_fg(coll_name: str, fg_list: list) -> bool:
+	clean_name = coll_name.lower().strip()
+	for fg_name in fg_list:
+		if not fg_name:
+			continue
+		if fg_name == clean_name or clean_name.startswith(fg_name) or fg_name in clean_name:
+			return True
+	return False
 
 def get_empty_groups_from_collection(collection_name: str):
 	coll = bpy.data.collections.get(collection_name)
@@ -198,110 +333,96 @@ def get_empty_groups_from_collection(collection_name: str):
 			recurse(child)
 	recurse(coll)
 	return result
-	
-# Main Fucntion
-def link_animation():
-	# Link the animation file
-	link_whole = $LINK_WHOLE
-	print("Animation file:", "$ANIMATION_FILE")
-	parents = {}
-	for name, prefix in $COLLECTION_LIST:
-		if name.lower() == "$CAMERA_COLLECTION".lower():
-			_force_remove_collection("$CAMERA_COLLECTION")
-			continue
-		parents[name] = ensure_parent_in_scene(name)
 
+# Main Function
+def link_animation():
+	print("Animation file:", "$ANIMATION_FILE")
+	anim_file = "$ANIMATION_FILE"
+	if not anim_file or not Path(anim_file).is_file():
+		print("[WARNING] Animation source file does not exist:", anim_file)
+		return
+
+	# 1. Ensure root scene collections: fg and bg
+	fg_root = ensure_collection("fg")
+	bg_root = ensure_collection("bg")
+
+	# 2. Ensure sub-category parent collections: chr_fg, chr_bg, prp_fg, prp_bg, vhc_fg, vhc_bg
+	cat_parents = {}
+	for code, prefix in collection_list:
+		if code in ["cam", "hdn", "ms", "set"] or not prefix:
+			continue
+		fg_cat_name = f"{code}_fg"
+		bg_cat_name = f"{code}_bg"
+		cat_parents[fg_cat_name] = ensure_collection(fg_cat_name, parent=fg_root)
+		cat_parents[bg_cat_name] = ensure_collection(bg_cat_name, parent=bg_root)
+
+	# 3. Discover desired collections from Animation library
 	desired = {}
-	with bpy.data.libraries.load("$ANIMATION_FILE", link=True) as (data_from, data_to):
-		for parent_name, prefix in $COLLECTION_LIST:
+	with bpy.data.libraries.load(anim_file, link=True) as (data_from, data_to):
+		for code, prefix in collection_list:
 			if prefix is None:
 				cam_coll = next((c for c in data_from.collections if c.lower() == "$CAMERA_COLLECTION".lower()), None)
-				if cam_coll:
-					desired[parent_name] = [cam_coll]
-				else:
-					desired[parent_name] = []
-				print("[WARNING] '$CAMERA_COLLECTION' not found in library")
+				desired[code] = [cam_coll] if cam_coll else []
 			else:
 				names = [n for n in data_from.collections if n.startswith(prefix)]
-				desired[parent_name] = names
+				desired[code] = names
 
+	# 4. Link all animated asset collections from library
 	to_link = []
-	for parent_name, names in desired.items():
-		if parent_name.lower() == "$CAMERA_COLLECTION".lower():
+	for code, names in desired.items():
+		if code == "cam":
 			continue
-		if link_whole:
-			if desired[parent_name]:
-				_force_remove_collection(parent_name)
-				to_link.append(parent_name)
-		else:
-			to_link.extend(names)
+		to_link.extend(names)
 
 	to_link = [n for n in to_link if n not in bpy.data.collections]
-
 	if to_link:
-		with bpy.data.libraries.load("$ANIMATION_FILE", link=True) as (data_from, data_to):
+		with bpy.data.libraries.load(anim_file, link=True) as (data_from, data_to):
 			data_to.collections = [n for n in to_link if n in data_from.collections]
-			print(f"linked: {data_to.collections}")
+			print(f"Linked collections: {data_to.collections}")
+
 	bpy.context.view_layer.update()
-	root_col = bpy.context.scene.collection
 
-	fg_parent = ensure_parent_in_scene("fg")
-	for parent_name, child_names in desired.items():
-		if parent_name.lower() == "$CAMERA_COLLECTION".lower():
+	# 5. Place each loaded collection into corresponding _fg or _bg parent
+	for code, child_names in desired.items():
+		if code == "cam":
 			continue
 
-		if link_whole:
-			col = bpy.data.collections.get(parent_name)
-			if not col:
-				print(f"[WARNING] Expected linked collection missing: {parent_name}")
-				continue
-
-			if not (col.library and bpy.path.abspath(col.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")):
-				col = next((c for c in bpy.data.collections
-							if c.name == parent_name and c.library and
-							bpy.path.abspath(c.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")), None)
-				if not col:
-					print(f"[WARNING] (Parent) No valid linked collection found for: {parent_name}")
-					continue
-
-			if col.name not in root_col.children:
-				root_col.children.link(col)
-				print(f"Linked '{parent_name}' under '{root_col.name}'")
-
-			continue
-
-		parent = parents.get(parent_name)
-		if not parent:
-			print(f"[WARNING] Local parent collection not found: {parent_name}")
-			continue
+		fg_cat_name = f"{code}_fg"
+		bg_cat_name = f"{code}_bg"
+		fg_cat_parent = cat_parents.get(fg_cat_name)
+		bg_cat_parent = cat_parents.get(bg_cat_name)
 
 		for cname in child_names:
 			col = bpy.data.collections.get(cname)
 			if not col:
+				col = next((c for c in bpy.data.collections
+							if c.name == cname and c.library and
+							bpy.path.abspath(c.library.filepath) == bpy.path.abspath(anim_file)), None)
+			if not col:
 				print(f"[WARNING] Expected linked collection missing: {cname}")
 				continue
 
-			if not (col.library and bpy.path.abspath(col.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")):
-				col = next((c for c in bpy.data.collections
-							if c.name == cname and c.library and
-							bpy.path.abspath(c.library.filepath) == bpy.path.abspath("$ANIMATION_FILE")), None)
-				if not col:
-					print(f"[WARNING] No valid linked collection found for: {cname}")
-					continue
+			# Check if selected as Foreground asset
+			if is_asset_in_fg(cname, fg_assets):
+				target_parent = fg_cat_parent
+				target_label = fg_cat_name
+			else:
+				# Unselected or extra character in ANM not in shot assets goes into BG
+				target_parent = bg_cat_parent
+				target_label = bg_cat_name
 
-			if col.name not in parent.children:
-				parent.children.link(col)
-				print(f"Linked '{cname}' under '{parent_name}'")
+			if target_parent and col.name not in target_parent.children:
+				target_parent.children.link(col)
+				# Unlink from scene root collection if directly attached
+				if col.name in bpy.context.scene.collection.children:
+					bpy.context.scene.collection.children.unlink(col)
+				print(f"Linked '{cname}' under '{target_label}'")
 
-		if parent.name not in fg_parent.children:
-			fg_parent.children.link(parent)
-			bpy.context.scene.collection.children.unlink(parent)
-
+	# 6. Camera handling
 	link_mode = bool($METHOD)
 	cam_names = next((v for k, v in desired.items() if k.lower() == "$CAMERA_COLLECTION".lower()), [])
 	if cam_names:
 		cam_name = cam_names[0]
-
 		for c in [c for c in list(bpy.data.collections) if c.name == cam_name or c.name.startswith(cam_name + ".")]:
 			for scene in bpy.data.scenes:
 				_unlink_collection_from(scene.collection, c)
@@ -315,7 +436,7 @@ def link_animation():
 		except Exception:
 			pass
 
-		with bpy.data.libraries.load("$ANIMATION_FILE", link=link_mode) as (data_from, data_to):
+		with bpy.data.libraries.load(anim_file, link=link_mode) as (data_from, data_to):
 			if cam_name in data_from.collections:
 				data_to.collections = [cam_name]
 			else:
@@ -356,92 +477,70 @@ def select_only(obj):
 	bpy.context.view_layer.objects.active = obj
 
 def link_set_collection(collections_dict):
-	bg_parent = ensure_parent_in_scene("bg")
+	bg_parent = ensure_collection("bg")
 	for category_name, file_paths in collections_dict.items():
-		# Create or get top-level category collection
 		if category_name in bpy.data.collections:
 			category_collection = bpy.data.collections[category_name]
 		else:
 			category_collection = bpy.data.collections.new(category_name)
 			bpy.context.scene.collection.children.link(category_collection)
 
-		# Link collections from each .blend file
 		for asset_path_str in file_paths:
 			asset_path = Path(asset_path_str)
-
-			# Collection name = stem of file (filename without extension)
-			collection_name = asset_path.stem  # e.g., "c-bahlil"
+			collection_name = asset_path.stem
 			if category_name == "set":
 				collection_name = f"{collection_name}_hi"
-			# Load collection from the blend file
 			with bpy.data.libraries.load(str(asset_path), link=True) as (data_from, data_to):
 				if collection_name in data_from.collections:
-					data_to.collections = [collection_name]  # Only load this collection
+					data_to.collections = [collection_name]
 				else:
 					print(f"Collection '{collection_name}' not found in {asset_path}")
 					continue
      
-			# Link the loaded collection into the category collection
 			for linked_collection in data_to.collections:
 				if linked_collection and linked_collection.name not in category_collection.children:
 					category_collection.children.link(linked_collection)
 					armatures = [obj for obj in linked_collection.all_objects if obj.type == 'ARMATURE']
-
 					if not armatures:
-						print(f"[SKIP] '{linked_collection.name}' tidak punya Armature.")
 						continue
 
-					# Ensure the overridden collection remains in the category collection and remove it from the root
 					if linked_collection.name in bpy.data.collections:
 						overridden_collection = bpy.data.collections[linked_collection.name]
 						if overridden_collection.name not in [child.name for child in category_collection.children]:
 							category_collection.children.link(overridden_collection)
-							print(f"Kept overridden collection '{overridden_collection.name}' in category '{category_collection.name}'")
-
-						# Remove the overridden collection from the root collection
 						if overridden_collection.name in [child.name for child in bpy.context.scene.collection.children]:
 							bpy.context.scene.collection.children.unlink(overridden_collection)
-							print(f"Removed overridden collection '{overridden_collection.name}' from root collection")
 
 					bpy.context.view_layer.update()
 				print(f"Linked collection '{linked_collection.name}' into '{category_name}'")
 
 		if category_collection.name not in bg_parent.children:
 			bg_parent.children.link(category_collection)
-			bpy.context.scene.collection.children.unlink(category_collection)
+			if category_collection.name in bpy.context.scene.collection.children:
+				bpy.context.scene.collection.children.unlink(category_collection)
 
+link_animation()
 link_set_collection(collections)
 
 def update_camera():
-	# Update camera settings
 	scene = bpy.data.scenes['Scene']
-
 	cam_obj = next((obj for obj in scene.objects if obj.type == 'CAMERA'), None)
-
 	if cam_obj:
 		scene.camera = cam_obj
-	else:
-		print("cam not found")
 
 	active_camera = bpy.context.scene.camera
 	if active_camera:
 		active_camera.data.clip_end = 1000
 		active_camera.data.dof.use_dof = True
 		active_camera.data.dof.driver_remove("aperture_fstop")
-		print(f"Camera '{active_camera.name}' settings updated: DOF disabled, clip_end set to 1000")
-	else:
-		print("No active camera found in the scene.")
 
 def set_relative():
-	# Make all file paths relative
 	bpy.context.preferences.filepaths.use_relative_paths = True
 	bpy.ops.file.make_paths_relative()
-						 
-# Execute functions
-link_animation()
+
 update_camera()
 set_relative()
-print("All operations completed successfully.")
+print("All lighting operations completed successfully.")
 
 settings = $SETTINGS
 if settings.get("frame_out") is not None:
@@ -469,7 +568,7 @@ print("File saved as: $OUTPUT_PATH")
 	
 # Quit Blender
 bpy.ops.wm.quit_blender()
-		"""
+"""
             )
         )
         script = tpl.substitute(
@@ -477,9 +576,9 @@ bpy.ops.wm.quit_blender()
             ANIMATION_FILE=animation_file,
             COLLECTION_LIST=collection_list,
             SET_COLLECTION=set_collection,
+            FG_ASSETS=clean_fg_assets,
             CAMERA_COLLECTION="cam",
             METHOD=False,
-            LINK_WHOLE=False,
             OUTPUT_PATH=filepath,
             SETTINGS=setting_data,
         )
@@ -502,8 +601,6 @@ bpy.ops.wm.quit_blender()
 
 
 if __name__ == "__main__":
-    # 1. Capture arguments from subprocess
-    # We expect JSON strings for the dictionaries
     try:
         shot_info = json.loads(sys.argv[1])
         current_dept = json.loads(sys.argv[2])
@@ -512,7 +609,6 @@ if __name__ == "__main__":
         addon_data = json.loads(sys.argv[5])
         file_paths = json.loads(sys.argv[-1])
 
-        # 2. Run the logic
         builder = LightingBuilder()
         result = builder.extract_data(
             shot_data=shot_info,
@@ -521,11 +617,9 @@ if __name__ == "__main__":
             mastershots_data=mastershot_data,
             addons_data=addon_data,
             filepath=file_paths,
+            show_ui=False,
         )
-
-        # 3. Print the result so the subprocess can "catch" it
         print(result)
-
     except Exception as e:
         print(f"Builder Error: {str(e)}", file=sys.stderr)
         sys.exit(1)

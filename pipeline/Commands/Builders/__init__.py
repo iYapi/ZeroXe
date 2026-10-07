@@ -8,6 +8,7 @@ from .compositing_builder import CompBuilder, CompositingBuilder
 from .editing_builder import EditBuilder, EditingBuilder
 from .layout_builder import LayoutBuilder
 from .lighting_builder import LightingBuilder
+from .lighting_dialog import LightingAssetDialog
 from .vfx_builder import FXBuilder, VFXBuilder
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "BlockingAnimationBuilder",
     "AnimationBuilder",
     "LightingBuilder",
+    "LightingAssetDialog",
     "VFXBuilder",
     "FXBuilder",
     "CompositingBuilder",

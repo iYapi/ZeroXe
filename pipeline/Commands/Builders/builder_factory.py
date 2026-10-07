@@ -597,15 +597,29 @@ class BuilderFactory:
 
         # Resolve scripts and presets in dept_info
         resolved_dept_info = dict(dept_info or {})
+        pipe_dir = str(Path(config_path).parent) if config_path else str(Path(__file__).parent.parent.parent)
+        proj_dir = (project_path or "").rstrip("/\\")
+        local_preset_dir = Path(pipe_dir) / "Presets" if pipe_dir else None
+
+        def _resolve_script_path(p_str: str) -> str:
+            if not isinstance(p_str, str):
+                return p_str
+            resolved = p_str.replace("@project_path@", proj_dir).replace("@pipeline_path@", pipe_dir)
+            if not Path(resolved).is_file() and local_preset_dir and local_preset_dir.is_dir():
+                cand = local_preset_dir / Path(resolved).name
+                if cand.is_file():
+                    return str(cand)
+            return resolved
+
         scripts = {}
         for sk, sv in (resolved_dept_info.get("scripts") or {}).items():
-            scripts[sk] = sv.replace("@project_path@", (project_path or "").rstrip("/\\")) if isinstance(sv, str) else sv
+            scripts[sk] = _resolve_script_path(sv)
         presets = {}
         for pk, pv in (resolved_dept_info.get("presets") or {}).items():
             if isinstance(pv, dict):
-                presets[pk] = {**pv, "path": pv.get("path", "").replace("@project_path@", (project_path or "").rstrip("/\\"))}
+                presets[pk] = {**pv, "path": _resolve_script_path(pv.get("path", ""))}
             elif isinstance(pv, str):
-                presets[pk] = {"path": pv.replace("@project_path@", (project_path or "").rstrip("/\\"))}
+                presets[pk] = {"path": _resolve_script_path(pv)}
         if "playblast" in scripts and "playblast" not in presets:
             presets["playblast"] = {"path": scripts["playblast"]}
         if "preset" in scripts and "preset" not in presets:

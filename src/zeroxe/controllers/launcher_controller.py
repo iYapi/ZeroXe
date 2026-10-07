@@ -1003,12 +1003,34 @@ class LauncherController(QObject):
                             shot=sh,
                             project_name=proj_name,
                         )
+
+                        assets = list(item.assets) if item.assets else []
+                        if not assets and item.id:
+                            try:
+                                from zeroxe.services.shot_service import ShotService
+
+                                assets = ShotService.get_assets_for_shot(item.id)
+                            except Exception:
+                                pass
+
+                        formatted_assets = []
+                        for a in assets:
+                            if isinstance(a, dict):
+                                formatted_assets.append(a)
+                            elif hasattr(a, "name"):
+                                formatted_assets.append({
+                                    "id": getattr(a, "id", ""),
+                                    "name": getattr(a, "name", ""),
+                                    "entity_type_id": getattr(a, "entity_type_id", getattr(a, "asset_type_id", "")),
+                                    "asset_type": getattr(a, "asset_type", ""),
+                                })
+
                         shot_data_dict = {
                             "id": item.id,
                             "name": item.name,
                             "sequence": sq,
                             "episode": ep,
-                            "assets": item.assets,
+                            "assets": formatted_assets,
                             "data": {
                                 "frame_in": item.frame_in,
                                 "frame_out": item.frame_out,

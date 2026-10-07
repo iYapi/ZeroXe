@@ -21,14 +21,14 @@ departments:
         based: "shot"
         base_path: "@project_path@/02_production/04_animation/"
         scripts:
-            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
-            up_master: "@project_path@/00_tools/01_preset_script/mdt_preset_bake_animation.py"
+            playblast: "@pipeline_path@/Presets/mdt_preset_playblast.py"
+            up_master: "@pipeline_path@/Presets/mdt_preset_bake_animation.py"
     Asset:
         kitsu_id: ""
         code: ""
         based: "asset"
         scripts:
-            up_master: "@project_path@/00_tools/01_preset_script/mdt_preset_texture_asset.py"
+            up_master: "@pipeline_path@/Presets/mdt_preset_texture_asset.py"
     Blocking:
         kitsu_id: ""
         code: "blk"
@@ -36,7 +36,7 @@ departments:
         based: "shot"
         base_path: "@project_path@/02_production/03_blocking/"
         scripts:
-            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
+            playblast: "@pipeline_path@/Presets/mdt_preset_playblast.py"
     Compositing:
         kitsu_id: ""
         code: "comp"
@@ -44,7 +44,7 @@ departments:
         based: "shot"
         base_path: "@project_path@/03_post_production/02_compositing/"
         scripts:
-            preset: "@project_path@/00_tools/01_preset_script/mdt_preset_comp.py"
+            preset: "@pipeline_path@/Presets/mdt_preset_comp.py"
     Editing:
         kitsu_id: ""
         code: "edit"
@@ -72,7 +72,7 @@ departments:
         based: "shot"
         base_path: "@project_path@/02_production/02_layout/"
         scripts:
-            playblast: "@project_path@/00_tools/01_preset_script/mdt_preset_playblast.py"
+            playblast: "@pipeline_path@/Presets/mdt_preset_playblast.py"
     Lighting:
         kitsu_id: ""
         code: "lgt"
@@ -80,7 +80,7 @@ departments:
         based: "shot"
         base_path: "@project_path@/03_post_production/01_lighting/"
         scripts:
-            preset: "@project_path@/00_tools/01_preset_script/mdt_preset_lgt.py"
+            preset: "@pipeline_path@/Presets/mdt_preset_lgt.py"
     LookDev:
         kitsu_id: ""
         code: ""
