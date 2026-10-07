@@ -505,6 +505,11 @@ class LauncherController(QObject):
         """Handle project selection change."""
         if not current.isValid():
             return
+
+        # 1. Clear item list and details immediately before loading new project data
+        self.view.item_source_model.clear()
+        self._clear_item_details()
+
         self.current_project = current.data(Qt.ItemDataRole.UserRole)
         self.view.ui.label_project.setText(f"Project: {self.current_project.name}")
 
@@ -529,12 +534,16 @@ class LauncherController(QObject):
 
     def on_type_toggled(self, button) -> None:
         """Handle Shot vs Asset toggle."""
+        self.view.item_source_model.clear()
+        self._clear_item_details()
         if self.current_project:
             self.load_categories(self.current_project.id)
             self.load_items()
 
     def on_category_changed(self, category_text: str) -> None:
         """Handle category (episode or asset type) selection change."""
+        self.view.item_source_model.clear()
+        self._clear_item_details()
         self.load_items()
 
     def on_item_selected(self, current, previous) -> None:
@@ -601,17 +610,11 @@ class LauncherController(QObject):
                     self.view.version_model.appendRow(ver_item)
 
             except Exception as e:
-                logger.error(f"Failed to scan versions for shot {sh}: {e}")
+                logger.warning(f"Could not scan versions for shot {sh}: {e}")
                 self.current_version = "Pipeline Error"
                 self.selected_file_path = None
                 self.view.ui.label_version.setText("<font color='#f87171'><b>Pipeline Error</b></font>")
                 self.update_metadata_table()
-                QMessageBox.warning(
-                    self.view,
-                    "Pipeline Not Found",
-                    f"Could not load pipeline for '{sh}':\n\n{e}\n\n"
-                    "Please configure the valid zeroxe_map.yaml path in Settings -> NAS.",
-                )
                 return
 
         elif self.current_asset:
@@ -648,18 +651,13 @@ class LauncherController(QObject):
                     self.view.version_model.appendRow(ver_item)
 
             except Exception as e:
-                logger.error(f"Failed to scan versions for asset {asset_name}: {e}")
+                logger.warning(f"Could not scan versions for asset {asset_name}: {e}")
                 self.current_version = "Pipeline Error"
                 self.selected_file_path = None
                 self.view.ui.label_version.setText("<font color='#f87171'><b>Pipeline Error</b></font>")
                 self.update_metadata_table()
-                QMessageBox.warning(
-                    self.view,
-                    "Pipeline Not Found",
-                    f"Could not load pipeline for asset '{asset_name}':\n\n{e}\n\n"
-                    "Please configure the valid zeroxe_map.yaml path in Settings -> NAS.",
-                )
                 return
+
 
 
         # 4. Auto-select the latest version by default
