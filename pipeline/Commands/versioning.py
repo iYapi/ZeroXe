@@ -104,6 +104,32 @@ class VersioningSystem:
         return str(ver_dir / version_filename)
 
     @staticmethod
+    def get_version_path(
+        filepath: Union[str, Path],
+        version: int = 1,
+        version_folder: str = "progress",
+        version_format: str = "v{version:03d}",
+    ) -> str:
+        """Calculate a specific version file path (defaults to v001 without incrementing)."""
+        p = Path(filepath).resolve()
+        parent = p.parent
+        ext = p.suffix or ".blend"
+        stem = p.stem
+
+        # Base stem without any version suffix
+        base_stem = re.sub(r"[_.\-]v\d+$", "", stem, flags=re.IGNORECASE)
+
+        # Determine version directory and base directory
+        if parent.name.lower() == version_folder.lower():
+            ver_dir = parent
+        else:
+            ver_dir = parent / version_folder
+
+        version_str = version_format.format(version=version)
+        version_filename = f"{base_stem}_{version_str}{ext}"
+        return str(ver_dir / version_filename)
+
+    @staticmethod
     def up_version(filepath: str) -> Tuple[str, str]:
         """Generate Blender automation script and target version path for Up Version action."""
         tpl = Template(dedent("""
@@ -178,6 +204,21 @@ def up_master(filepath: str, setting_data: Optional[Dict[str, Any]] = None) -> T
 def get_master_path(filepath: Union[str, Path]) -> str:
     """Module-level shortcut for VersioningSystem.get_master_path."""
     return VersioningSystem.get_master_path(filepath)
+
+
+def get_version_path(
+    filepath: Union[str, Path],
+    version: int = 1,
+    version_folder: str = "progress",
+    version_format: str = "v{version:03d}",
+) -> str:
+    """Module-level shortcut for VersioningSystem.get_version_path."""
+    return VersioningSystem.get_version_path(
+        filepath=filepath,
+        version=version,
+        version_folder=version_folder,
+        version_format=version_format,
+    )
 
 
 def get_next_version_path(

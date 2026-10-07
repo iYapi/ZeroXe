@@ -754,6 +754,8 @@ class PipelineService:
 
             output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
             success = (proc.returncode == 0)
+            if "Traceback (most recent call last):" in output or "Error: Python:" in output:
+                success = False
             return success, output
         except subprocess.TimeoutExpired:
             return False, f"Blender execution timed out after {timeout} seconds."
@@ -772,10 +774,7 @@ class PipelineService:
         department: Optional[str] = None,
         project_name: Optional[str] = None,
     ) -> List[str]:
-        """Dynamically query all available features strictly for the given project from external pipeline."""
-        if not project_name:
-            return []
-
+        """Dynamically query all available features for the project from external pipeline."""
         config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
         if not config_path:
             return []
@@ -859,14 +858,25 @@ class PipelineService:
         if not is_success:
             return False, msg or f"Pipeline feature '{feature_name}' returned failure.", target_path
 
-        # If pipeline generated a DCC script, execute it headlessly via Blender
+        # If pipeline generated a DCC script, execute it headlessly via Blender if available
         if script:
             if target_path:
                 Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+            final_p = getattr(result, "data", {}).get("final_path") if hasattr(result, "data") else None
+            if final_p:
+                Path(final_p).parent.mkdir(parents=True, exist_ok=True)
+
+            active_blender = SettingsService.get_active_blender()
+            if not active_blender or not Path(active_blender).is_file():
+                return True, msg or f"Script generated successfully for '{feature_name}'", target_path
 
             dcc_success, dcc_output = cls.execute_blender_script(script)
             if not dcc_success:
-                return False, f"DCC execution failed:\n\n{dcc_output}", target_path
+                return False, f"Blender execution error:\n\n{dcc_output}", target_path
+
+            # Verify that the target file exists on disk
+            if target_path and not Path(target_path).is_file():
+                return False, f"Blender completed but target file was not created:\n{target_path}\n\nBlender Log:\n{dcc_output}", target_path
 
             return True, msg or f"Successfully executed '{feature_name}'", target_path
 

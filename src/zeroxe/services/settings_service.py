@@ -51,7 +51,18 @@ class SettingsService:
     # ------------------------------------------------------------------
     @classmethod
     def get_zeroxe_map_path(cls) -> str:
-        return cls._settings().value("nas/zeroxe_map_path", "", type=str)
+        from pathlib import Path
+
+        if cls._settings().contains("nas/zeroxe_map_path"):
+            return cls._settings().value("nas/zeroxe_map_path", "", type=str)
+
+        # Default fallback to standard NAS or local workspace zeroxe_map.yaml if not configured
+        if Path("/mnt/I/zeroxe_map.yaml").is_file():
+            return "/mnt/I/zeroxe_map.yaml"
+        if Path("zeroxe_map.yaml").is_file():
+            return str(Path("zeroxe_map.yaml").resolve())
+
+        return ""
 
     @classmethod
     def set_zeroxe_map_path(cls, path: str) -> None:

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from zeroxe import config
 from zeroxe.api.gazu_client import init_kitsu
+from zeroxe.utils.log_util import show_error_dialog
 from zeroxe.utils.security import decrypt_string, encrypt_string
 
 if TYPE_CHECKING:
@@ -174,10 +175,12 @@ class SettingController(QObject):
                     f"Successfully connected to Kitsu!\n\nLogged in as: {email}",
                 )
             else:
-                QMessageBox.critical(
-                    self.view,
-                    "Kitsu Login Failed",
-                    f"Could not log in to Kitsu:\n\n{message}",
+                show_error_dialog(
+                    parent=self.view,
+                    title="Kitsu Login Failed",
+                    summary="Could not log in to Kitsu. Please check your credentials.",
+                    full_log=str(message),
+                    prefix="zeroxe_kitsu_error",
                 )
         finally:
             login_btn.setEnabled(True)

@@ -54,17 +54,18 @@ except Exception:
             LockManager = None
 
 try:
-    from versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+    from versioning import VersioningSystem, get_master_path, get_next_version_path, get_version_path, up_master, up_version
 except Exception:
     try:
-        from Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+        from Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, get_version_path, up_master, up_version
     except Exception:
         try:
-            from pipeline.Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, up_master, up_version
+            from pipeline.Commands.versioning import VersioningSystem, get_master_path, get_next_version_path, get_version_path, up_master, up_version
         except Exception:
             VersioningSystem = None
             get_master_path = None
             get_next_version_path = None
+            get_version_path = None
             up_master = None
             up_version = None
 
@@ -96,6 +97,18 @@ except Exception:
             execute_feature = None
             list_available_features = None
             register_feature = None
+
+try:
+    from Builders.builder_factory import BuilderFactory, BuilderResult
+except Exception:
+    try:
+        from Commands.Builders.builder_factory import BuilderFactory, BuilderResult
+    except Exception:
+        try:
+            from pipeline.Commands.Builders.builder_factory import BuilderFactory, BuilderResult
+        except Exception:
+            BuilderFactory = None
+            BuilderResult = None
 
 # Default pipeline configuration location (relative to this Commands folder)
 DEFAULT_PIPELINE_YAML = _pipeline_root / "pipeline.yaml"
@@ -471,6 +484,34 @@ def generate_up_master_script(
     return VersioningSystem.up_master(filepath, setting_data=setting_data)
 
 
+def generate_builder_script(
+    filepath: str,
+    department: str = "Layout",
+    shot_data: Optional[Dict[str, Any]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    setting_data: Optional[Dict[str, Any]] = None,
+    builder_mode: str = "previous",
+    **kwargs: Any,
+) -> Tuple[str, str]:
+    """Generate Blender script and version path using pipeline modular builder."""
+    cfg = config_path or DEFAULT_PIPELINE_YAML
+    if BuilderFactory:
+        res = BuilderFactory.generate_shot_script(
+            filepath=filepath,
+            department=department,
+            shot_data=shot_data,
+            config_path=cfg,
+            project_path=project_path,
+            setting_data=setting_data,
+            builder_mode=builder_mode,
+            **kwargs,
+        )
+        return res.script, res.target_version_path
+    from versioning import VersioningSystem
+    return "import bpy", VersioningSystem.get_version_path(filepath, version=1)
+
+
 # ==============================================================================
 # Dynamic Pipeline Features Discovery and Dispatch APIs
 # ==============================================================================
@@ -487,7 +528,7 @@ def list_features(
             config_path=cfg,
             project_path=project_path,
         )
-    return ["Up Version", "Up Master"]
+    return ["Generate", "Up Version", "Up Master"]
 
 
 def run_pipeline_feature(
@@ -514,7 +555,22 @@ def run_pipeline_feature(
 
     # Fallback to direct handlers
     clean_name = feature_name.lower().replace("_", " ")
-    if clean_name in ("up version", "up_version"):
+    if clean_name in ("generate",):
+        script, ver_path = generate_builder_script(
+            filepath=filepath,
+            department=department or "Layout",
+            config_path=cfg,
+            project_path=project_path,
+            setting_data=setting_data,
+            **kwargs,
+        )
+        return {
+            "success": True,
+            "message": f"Generated builder script for {ver_path}",
+            "target_path": ver_path,
+            "script": script,
+        }
+    elif clean_name in ("up version", "up_version"):
         script, ver_path = generate_up_version_script(filepath)
         return {
             "success": True,
@@ -542,6 +598,14 @@ def main() -> None:
     parser.add_argument("--config", "-c", type=Path, default=None, help="Path to pipeline.yaml")
 
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
+
+    # generate command
+    gen_parser = subparsers.add_parser("generate", help="Generate initial DCC scene file using pipeline builder")
+    gen_parser.add_argument("--file", "-f", required=True, help="Input DCC file path or target shot file path")
+    gen_parser.add_argument("--dept", "-d", default="Layout", help="Department name (e.g. Layout, Animation)")
+    gen_parser.add_argument("--mode", "-m", default="previous", help="Builder resolution mode (e.g. previous, scan)")
+    gen_parser.add_argument("--shot-data", default="{}", help="JSON string of shot data / metadata")
+    gen_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # list-features command
     list_feat_parser = subparsers.add_parser("list-features", help="List all available pipeline features")
@@ -597,7 +661,28 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == "list-features":
+    if args.command == "generate":
+        shot_data = {}
+        if getattr(args, "shot_data", None):
+            try:
+                shot_data = json.loads(args.shot_data)
+            except Exception:
+                pass
+
+        script, ver_path = generate_builder_script(
+            filepath=args.file,
+            department=args.dept,
+            shot_data=shot_data,
+            config_path=args.config,
+            builder_mode=getattr(args, "mode", "previous"),
+        )
+        if args.json:
+            print(json.dumps({"version_path": ver_path, "script": script}, indent=2))
+        else:
+            print(f"Target Version Path: {ver_path}")
+            print("Generated Script:\n" + script)
+
+    elif args.command == "list-features":
         features = list_features(department=args.dept, config_path=args.config)
         if args.json:
             print(json.dumps({"features": features}, indent=2))

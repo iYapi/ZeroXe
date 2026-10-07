@@ -75,6 +75,64 @@ def register_feature(
 # ==============================================================================
 # Built-in Core Pipeline Features
 # ==============================================================================
+@register_feature(
+    name="Generate",
+    description="Generate initial DCC scene file using department pipeline builder",
+    order=5,
+)
+def handle_generate(
+    filepath: str,
+    department: Optional[str] = None,
+    shot_data: Optional[Dict[str, Any]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    setting_data: Optional[Dict[str, Any]] = None,
+    builder_mode: str = "previous",
+    **kwargs: Any,
+) -> PipelineFeatureResult:
+    """Handler for Generate action using modular builders (Layout, Animation, Animatic)."""
+    if not filepath:
+        return PipelineFeatureResult(success=False, message="No target file path provided.")
+
+    try:
+        from Builders.builder_factory import BuilderFactory
+    except ImportError:
+        try:
+            from Commands.Builders.builder_factory import BuilderFactory
+        except ImportError:
+            try:
+                from pipeline.Commands.Builders.builder_factory import BuilderFactory
+            except ImportError:
+                from .Builders.builder_factory import BuilderFactory
+
+    try:
+        res = BuilderFactory.generate_shot_script(
+            filepath=filepath,
+            department=department or "Layout",
+            shot_data=shot_data,
+            config_path=config_path,
+            project_path=project_path,
+            setting_data=setting_data,
+            builder_mode=builder_mode,
+            **kwargs,
+        )
+
+        return PipelineFeatureResult(
+            success=res.success,
+            message=res.message,
+            target_path=res.target_version_path,
+            script=res.script,
+            data={
+                "action": "generate",
+                "version_path": res.target_version_path,
+                "final_path": res.target_final_path,
+                "source_path": res.source_path,
+            },
+        )
+    except Exception as e:
+        return PipelineFeatureResult(success=False, message=f"Failed to generate shot file: {e}")
+
+
 @register_feature(name="Up Version", description="Incrementally save next version file", order=10)
 def handle_up_version(filepath: str, **kwargs: Any) -> PipelineFeatureResult:
     """Handler for Up Version action."""
