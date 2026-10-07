@@ -606,6 +606,17 @@ def run_pipeline_feature(
             "target_path": ver_path,
             "script": script,
         }
+    elif clean_name in ("sync", "sync assets", "sync_assets"):
+        if execute_feature:
+            return execute_feature(
+                feature_name="Sync",
+                filepath=filepath,
+                department=department,
+                config_path=cfg,
+                project_path=project_path,
+                setting_data=setting_data,
+                **kwargs,
+            )
     elif clean_name in ("up version", "up_version"):
         script, ver_path = generate_up_version_script(filepath)
         return {

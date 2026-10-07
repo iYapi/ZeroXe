@@ -9,6 +9,7 @@ from .editing_builder import EditBuilder, EditingBuilder
 from .layout_builder import LayoutBuilder
 from .lighting_builder import LightingBuilder
 from .lighting_dialog import LightingAssetDialog
+from .sync_builder import SyncBuilder
 from .vfx_builder import FXBuilder, VFXBuilder
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "AnimationBuilder",
     "LightingBuilder",
     "LightingAssetDialog",
+    "SyncBuilder",
     "VFXBuilder",
     "FXBuilder",
     "CompositingBuilder",
@@ -28,4 +30,5 @@ __all__ = [
     "BuilderFactory",
     "BuilderResult",
 ]
+
 

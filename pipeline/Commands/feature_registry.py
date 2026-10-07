@@ -147,6 +147,87 @@ def handle_generate(
         return PipelineFeatureResult(success=False, message=f"Failed to generate scene file: {e}")
 
 
+@register_feature(
+    name="Sync",
+    description="Synchronize newly added Kitsu assets into scene and increment version if new assets are added",
+    departments=["layout", "animation", "blocking", "lay", "anm", "blk"],
+    order=8,
+)
+def handle_sync(
+    filepath: str,
+    department: Optional[str] = "Animation",
+    shot_data: Optional[Dict[str, Any]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    setting_data: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> PipelineFeatureResult:
+    """Handler for Sync action: imports missing Kitsu assets and increments version only if changes are made."""
+    if not filepath:
+        return PipelineFeatureResult(success=False, message="No target file path provided.")
+
+    try:
+        from Builders.sync_builder import SyncBuilder
+    except ImportError:
+        try:
+            from Commands.Builders.sync_builder import SyncBuilder
+        except ImportError:
+            try:
+                from pipeline.Commands.Builders.sync_builder import SyncBuilder
+            except ImportError:
+                from .Builders.sync_builder import SyncBuilder
+
+    # Load configuration
+    cfg = {}
+    if config_path and Path(config_path).is_file():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception:
+            pass
+
+    dept_name = department or "Animation"
+    departments = cfg.get("departments", {})
+    dept_info = departments.get(dept_name, {})
+    if not dept_info:
+        for k, v in departments.items():
+            if k.lower() == dept_name.lower() or (isinstance(v, dict) and str(v.get("code", "")).lower() == dept_name.lower()):
+                dept_info = v
+                dept_name = k
+                break
+
+    asset_dept = {"Asset": {"asset_type": cfg.get("asset_type", {})}}
+
+    try:
+        builder = SyncBuilder()
+        next_ver_path = VersioningSystem.get_next_version_path(filepath)
+        final_p = VersioningSystem.get_master_path(filepath)
+
+        script = builder.extract_data(
+            shot_data=shot_data or {},
+            current_department={dept_name: dept_info},
+            asset_department=asset_dept,
+            filepath={"version": filepath, "final": final_p},
+            config_path=config_path,
+            project_path=project_path,
+            **kwargs,
+        )
+
+        return PipelineFeatureResult(
+            success=True,
+            message=f"Successfully generated Sync script for:\n{filepath}",
+            target_path=next_ver_path,
+            script=script,
+            data={
+                "action": "sync",
+                "version_path": next_ver_path,
+                "current_path": filepath,
+                "final_path": final_p,
+            },
+        )
+    except Exception as e:
+        return PipelineFeatureResult(success=False, message=f"Failed to execute Sync: {e}")
+
 
 @register_feature(name="Up Version", description="Incrementally save next version file", order=10)
 def handle_up_version(filepath: str, **kwargs: Any) -> PipelineFeatureResult:

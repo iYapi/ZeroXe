@@ -191,9 +191,10 @@ def test_dynamic_feature_discovery_and_execution(tmp_path):
     # 1. Configured project has features
     features = PipelineService.list_features(department="Animation", project_name="TestProject")
     assert "Generate" in features
+    assert "Sync" in features
     assert "Up Version" in features
     assert "Up Master" in features
-    assert len(features) == 3
+    assert len(features) == 4
 
     # 2. Unconfigured project has NO features
     unconfigured_features = PipelineService.list_features(department="Animation", project_name="UnconfiguredProject")
