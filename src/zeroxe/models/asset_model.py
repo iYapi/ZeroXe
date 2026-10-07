@@ -13,12 +13,22 @@ class Asset:
 
     @classmethod
     def from_kitsu(cls, data: Dict[str, Any]) -> "Asset":
+        custom_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+        preview_id = (
+            data.get("preview_file_id")
+            or data.get("file_preview_id")
+            or data.get("thumbnail_id")
+            or custom_data.get("preview_file_id")
+            or custom_data.get("file_preview_id")
+            or custom_data.get("thumbnail_id")
+            or ""
+        )
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
             asset_type_id=data.get("entity_type_id", ""),
             asset_type=data.get("entity_type", ""),
-            file_preview_id=data.get("preview_file_id", "") or "",
+            file_preview_id=str(preview_id) if preview_id else "",
             project_id=data.get("project_id", "") or "",
         )
 

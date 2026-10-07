@@ -13,8 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from PySide6.QtCore import QObject, QProcess, Qt
-from PySide6.QtGui import QStandardItem
+from PySide6.QtCore import QEvent, QObject, QProcess, QRunnable, QThreadPool, Qt, Signal
+from PySide6.QtGui import QPixmap, QStandardItem
 from PySide6.QtWidgets import QAbstractItemView, QMessageBox
 
 from zeroxe.models.asset_model import Asset, AssetType
@@ -36,6 +36,111 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class PreviewWorkerSignals(QObject):
+    """Signals for background preview download."""
+
+    finished = Signal(str, str, str)  # item_id, preview_file_id, local_file_path
+
+
+class PreviewDownloadRunnable(QRunnable):
+    """Worker task to download preview image from Kitsu/Gazu in background."""
+
+    def __init__(
+        self,
+        item_id: str,
+        preview_file_id: str,
+        entity_type: str,
+        cache_dir: Path,
+        signals: PreviewWorkerSignals,
+    ):
+        super().__init__()
+        self.item_id = item_id
+        self.preview_file_id = preview_file_id
+        self.entity_type = entity_type
+        self.cache_dir = cache_dir
+        self.signals = signals
+
+    def run(self) -> None:
+        try:
+            import gazu
+            from zeroxe.api.gazu_client import init_kitsu, is_kitsu_connected
+
+            if not is_kitsu_connected():
+                init_kitsu()
+
+            target_id = (self.preview_file_id or "").strip()
+
+            # If no direct preview_file_id, look up tasks in Kitsu for the entity
+            if not target_id and self.item_id:
+                try:
+                    if self.entity_type == "shot":
+                        tasks = gazu.task.all_tasks_for_shot(self.item_id) or []
+                    else:
+                        tasks = gazu.task.all_tasks_for_asset(self.item_id) or []
+
+                    for t in tasks:
+                        pfs = gazu.files.get_all_preview_files_for_task(t) or []
+                        if pfs:
+                            last_pf = pfs[-1]
+                            target_id = last_pf.get("id") if isinstance(last_pf, dict) else str(last_pf)
+                            break
+                except Exception as e:
+                    logger.debug(f"Failed to lookup preview from tasks for {self.item_id}: {e}")
+
+            if not target_id:
+                self.signals.finished.emit(self.item_id, "", "")
+                return
+
+            dest_path = str(self.cache_dir / f"{target_id}.png")
+            dest = Path(dest_path)
+
+            # Check if valid image already exists on disk
+            if dest.is_file() and dest.stat().st_size > 0:
+                pixmap = QPixmap(dest_path)
+                if not pixmap.isNull():
+                    self.signals.finished.emit(self.item_id, target_id, dest_path)
+                    return
+                else:
+                    try:
+                        dest.unlink()
+                    except OSError:
+                        pass
+
+            # Robust download cascade:
+            # 1. download_preview_file_cover (guarantees PNG image even for MP4 movie previews)
+            # 2. download_preview_file (standard gazu download)
+            # 3. download_preview_file_thumbnail (small PNG thumbnail)
+            downloaded = False
+            for download_func in [
+                gazu.files.download_preview_file_cover,
+                gazu.files.download_preview_file,
+                gazu.files.download_preview_file_thumbnail,
+            ]:
+                try:
+                    download_func(target_id, dest_path)
+                    if dest.is_file() and dest.stat().st_size > 0:
+                        pixmap = QPixmap(dest_path)
+                        if not pixmap.isNull():
+                            downloaded = True
+                            break
+                        else:
+                            try:
+                                dest.unlink()
+                            except OSError:
+                                pass
+                except Exception:
+                    continue
+
+            if downloaded and dest.is_file() and dest.stat().st_size > 0:
+                self.signals.finished.emit(self.item_id, target_id, dest_path)
+            else:
+                self.signals.finished.emit(self.item_id, target_id, "")
+        except Exception as e:
+            logger.debug(f"Failed preview worker execution for {self.item_id}: {e}")
+            self.signals.finished.emit(self.item_id, self.preview_file_id, "")
+
+
+
 class LauncherController(QObject):
     """Controller for the Launcher screen."""
 
@@ -55,6 +160,10 @@ class LauncherController(QObject):
 
         # Track active DCC child processes for auto-unlock
         self._active_processes: Dict[str, QProcess] = {}
+
+        # Active preview pixmap for responsive width scaling
+        self._current_pixmap: Optional[QPixmap] = None
+        self.view.ui.label_image.installEventFilter(self)
 
         self._bind_signals()
         self.load_initial_data()
@@ -487,16 +596,35 @@ class LauncherController(QObject):
             v_item = QStandardItem(str(v))
             self.view.metadata_model.appendRow([k_item, v_item])
 
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Handle label_image resize events to dynamically scale preview to width."""
+        view = getattr(self, "view", None)
+        if (
+            view
+            and hasattr(view, "ui")
+            and watched == getattr(view.ui, "label_image", None)
+            and event.type() == QEvent.Type.Resize
+            and getattr(self, "_current_pixmap", None)
+            and not self._current_pixmap.isNull()
+        ):
+            self._render_current_pixmap()
+        return super().eventFilter(watched, event)
+
     def _clear_item_details(self) -> None:
         """Reset item details in the view."""
         self.current_shot = None
         self.current_asset = None
         self.current_version = ""
         self.selected_file_path = None
+        self._current_item_id = ""
+        self._current_preview_id = ""
+        self._current_pixmap = None
         self.view.version_model.clear()
         self.view.metadata_model.removeRows(0, self.view.metadata_model.rowCount())
         self.view.ui.label_title.setText("No item selected")
         self.view.ui.label_version.setText("No version")
+        self.view.ui.label_image.clear()
+        self.view.ui.label_image.setText("No Preview")
 
     # ------------------------------------------------------------------
     # Action Slots
@@ -553,21 +681,126 @@ class LauncherController(QObject):
         source_idx = self.view.item_proxy_model.mapToSource(current)
         selected_data = source_idx.data(Qt.ItemDataRole.UserRole)
 
+        preview_id = ""
+        item_id = ""
+        entity_type = ""
         if isinstance(selected_data, Shot):
             self.current_shot = selected_data
             self.current_asset = None
+            item_id = self.current_shot.id
+            entity_type = "shot"
             seq_name = self.current_shot.sequence or ""
             display_name = f"{seq_name}_{self.current_shot.name}" if seq_name else self.current_shot.name
             self.view.ui.label_title.setText(f"<b>{display_name}</b>")
+            preview_id = getattr(self.current_shot, "preview_file_id", "") or ""
         elif isinstance(selected_data, Asset):
             self.current_asset = selected_data
             self.current_shot = None
+            item_id = self.current_asset.id
+            entity_type = "asset"
             self.view.ui.label_title.setText(f"<b>{self.current_asset.name}</b>")
+            preview_id = (
+                getattr(self.current_asset, "file_preview_id", "")
+                or getattr(self.current_asset, "preview_file_id", "")
+                or ""
+            )
         else:
             self._clear_item_details()
             return
 
+        self.update_image_preview(item_id, preview_id, entity_type)
         self.refresh_versions()
+
+    # ------------------------------------------------------------------
+    # Image Preview Handling
+    # ------------------------------------------------------------------
+    def update_image_preview(
+        self,
+        item_id: str,
+        preview_file_id: Optional[str] = "",
+        entity_type: str = "asset",
+    ) -> None:
+        """Load or download preview image using gazu with caching."""
+        self._current_item_id = item_id
+        clean_id = (preview_file_id or "").strip()
+        self._current_preview_id = clean_id
+
+        cache_dir = Path.home() / ".cache" / "zeroxe" / "previews"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+
+        # 1. If already cached on disk as a valid image, display immediately (0ms)
+        if clean_id:
+            target_path = cache_dir / f"{clean_id}.png"
+            if target_path.is_file() and target_path.stat().st_size > 0:
+                pixmap = QPixmap(str(target_path))
+                if not pixmap.isNull():
+                    self._display_preview_image(str(target_path))
+                    return
+                else:
+                    try:
+                        target_path.unlink()
+                    except OSError:
+                        pass
+
+        # 2. Display loading state while fetching in background
+        self.view.ui.label_image.setText("Loading Preview...")
+
+        # 3. Asynchronously download in thread pool to prevent UI blocking
+        signals = PreviewWorkerSignals()
+        signals.finished.connect(self._on_preview_downloaded)
+        self._active_preview_signals = signals
+        worker = PreviewDownloadRunnable(item_id, clean_id, entity_type, cache_dir, signals)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_preview_downloaded(self, item_id: str, preview_file_id: str, file_path: str) -> None:
+        """Handle completed background preview download."""
+        if getattr(self, "_current_item_id", "") != item_id:
+            return  # Active selection changed
+
+        if preview_file_id:
+            self._current_preview_id = preview_file_id
+            if self.current_shot and self.current_shot.id == item_id:
+                self.current_shot.preview_file_id = preview_file_id
+            elif self.current_asset and self.current_asset.id == item_id:
+                self.current_asset.file_preview_id = preview_file_id
+
+        if file_path and Path(file_path).is_file() and Path(file_path).stat().st_size > 0:
+            self._display_preview_image(file_path)
+        else:
+            self._current_pixmap = None
+            self.view.ui.label_image.clear()
+            self.view.ui.label_image.setText("No Preview")
+
+    def _display_preview_image(self, file_path: str) -> None:
+        """Display image scaled to follow the full width of label_image."""
+        pixmap = QPixmap(file_path)
+        if pixmap.isNull():
+            self._current_pixmap = None
+            self.view.ui.label_image.clear()
+            self.view.ui.label_image.setText("No Preview")
+            return
+
+        self._current_pixmap = pixmap
+        self._render_current_pixmap()
+
+    def _render_current_pixmap(self) -> None:
+        """Render the cached pixmap scaled to follow the label's width."""
+        if not getattr(self, "_current_pixmap", None) or self._current_pixmap.isNull():
+            return
+
+        avail_width = self.view.ui.label_image.contentsRect().width()
+        if avail_width <= 10:
+            avail_width = max(self.view.ui.label_image.width() - 4, 200)
+
+        scaled = self._current_pixmap.scaledToWidth(
+            max(avail_width, 100),
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.view.ui.label_image.setPixmap(scaled)
+
 
     def refresh_versions(self) -> None:
         """Scan pipeline versioning files for currently selected item and populate listView_version."""

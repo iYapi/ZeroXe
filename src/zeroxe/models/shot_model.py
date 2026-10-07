@@ -25,6 +25,15 @@ class Shot:
     @classmethod
     def from_kitsu(cls, data: Dict[str, Any]) -> "Shot":
         custom_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+        preview_id = (
+            data.get("preview_file_id")
+            or data.get("file_preview_id")
+            or data.get("thumbnail_id")
+            or custom_data.get("preview_file_id")
+            or custom_data.get("file_preview_id")
+            or custom_data.get("thumbnail_id")
+            or ""
+        )
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
@@ -32,7 +41,7 @@ class Shot:
             sequence=data.get("sequence", ""),
             episode_id=data.get("episode_id", ""),
             episode=data.get("episode", ""),
-            preview_file_id=data.get("preview_file_id", "") or "",
+            preview_file_id=str(preview_id) if preview_id else "",
             resolution=str(custom_data.get("resolution", "") or ""),
             fps=int(custom_data.get("fps") or 0),
             frame_in=int(custom_data.get("frame_in") or 0),

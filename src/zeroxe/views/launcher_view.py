@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QHeaderView,
+    QSizePolicy,
     QWidget,
 )
 
@@ -91,3 +92,16 @@ class LauncherView(QWidget):
 
         # Search placeholder
         self.ui.lineEdit_searchAsset.setPlaceholderText("Search item...")
+
+        # Configure image preview label to expand with column width
+        self.ui.label_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ui.label_image.setText("No Preview")
+        self.ui.label_image.setMinimumHeight(120)
+        self.ui.label_image.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.ui.label_image.setStyleSheet(
+            "QLabel { background-color: #1a1a1e; border: 1px solid #2e2e38; border-radius: 4px; color: #888899; }"
+        )
+
