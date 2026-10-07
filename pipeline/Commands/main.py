@@ -484,6 +484,30 @@ def generate_up_master_script(
     return VersioningSystem.up_master(filepath, setting_data=setting_data)
 
 
+def generate_asset_builder_script(
+    filepath: str,
+    department: str = "Asset",
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    setting_data: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> Tuple[str, str]:
+    """Generate Blender script and version path for an asset using pipeline AssetBuilder."""
+    cfg = config_path or DEFAULT_PIPELINE_YAML
+    if BuilderFactory:
+        res = BuilderFactory.generate_asset_script(
+            filepath=filepath,
+            department=department,
+            config_path=cfg,
+            project_path=project_path,
+            setting_data=setting_data,
+            **kwargs,
+        )
+        return res.script, res.target_version_path
+    from versioning import VersioningSystem
+    return "import bpy", VersioningSystem.get_version_path(filepath, version=1)
+
+
 def generate_builder_script(
     filepath: str,
     department: str = "Layout",
@@ -495,6 +519,17 @@ def generate_builder_script(
     **kwargs: Any,
 ) -> Tuple[str, str]:
     """Generate Blender script and version path using pipeline modular builder."""
+    dept_clean = (department or "").lower().strip()
+    if dept_clean in ("asset", "assets"):
+        return generate_asset_builder_script(
+            filepath=filepath,
+            department=department,
+            config_path=config_path,
+            project_path=project_path,
+            setting_data=setting_data,
+            **kwargs,
+        )
+
     cfg = config_path or DEFAULT_PIPELINE_YAML
     if BuilderFactory:
         res = BuilderFactory.generate_shot_script(
@@ -510,6 +545,7 @@ def generate_builder_script(
         return res.script, res.target_version_path
     from versioning import VersioningSystem
     return "import bpy", VersioningSystem.get_version_path(filepath, version=1)
+
 
 
 # ==============================================================================

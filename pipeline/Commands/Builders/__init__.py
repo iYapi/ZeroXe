@@ -2,6 +2,7 @@
 
 from .animatic_builder import AnimaticBuilder
 from .animation_builder import AnimationBuilder, BlockingAnimationBuilder
+from .asset_builder import AssetBuilder
 from .builder_factory import BuilderFactory, BuilderResult
 from .compositing_builder import CompBuilder, CompositingBuilder
 from .editing_builder import EditBuilder, EditingBuilder
@@ -11,6 +12,7 @@ from .vfx_builder import FXBuilder, VFXBuilder
 
 __all__ = [
     "AnimaticBuilder",
+    "AssetBuilder",
     "LayoutBuilder",
     "BlockingAnimationBuilder",
     "AnimationBuilder",
@@ -24,3 +26,4 @@ __all__ = [
     "BuilderFactory",
     "BuilderResult",
 ]
+

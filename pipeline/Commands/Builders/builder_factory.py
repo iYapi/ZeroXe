@@ -16,7 +16,9 @@ import yaml
 
 from .animatic_builder import AnimaticBuilder
 from .animation_builder import AnimationBuilder, BlockingAnimationBuilder
+from .asset_builder import AssetBuilder
 from .layout_builder import LayoutBuilder
+
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +245,8 @@ class BuilderFactory:
                 patterns.extend(["compositing", "comp"])
             if "edit" in dept_clean or code == "edit":
                 patterns.extend(["editing", "edit"])
+            if "asset" in dept_clean or code == "ast":
+                patterns.extend(["asset", "ast"])
 
             # Find matching file in directory
             for f in sorted(dir_files, key=lambda x: x.name):
@@ -347,6 +351,7 @@ class BuilderFactory:
         from .vfx_builder import VFXBuilder
         from .compositing_builder import CompositingBuilder
         from .editing_builder import EditingBuilder
+        from .asset_builder import AssetBuilder
 
         cfg = dept_cfg or {}
         dept_clean = department.strip().lower()
@@ -354,6 +359,8 @@ class BuilderFactory:
         source = str(cfg.get("source", "")).strip().lower()
         builder_role = str(cfg.get("builder", "")).strip().lower()
 
+        if "asset" in dept_clean or code in ("ast", "asset") or builder_role in ("asset", "asset_builder") or cfg.get("based") == "asset":
+            return AssetBuilder()
         if "light" in dept_clean or code == "lgt":
             return LightingBuilder()
         if "vfx" in dept_clean or "fx" in dept_clean or code == "fx":
@@ -369,6 +376,7 @@ class BuilderFactory:
 
         # Department has a source division
         return BlockingAnimationBuilder()
+
 
     @classmethod
     def invoke_builder_extract_data(
@@ -487,6 +495,19 @@ class BuilderFactory:
                     if k.lower() == dept_clean or str(v.get("code", "")).lower() == dept_clean:
                         dept_info = v
                         break
+
+        # Check if department is Asset or asset-based
+        dept_clean = department.lower().strip()
+        if dept_clean in ("asset", "assets") or dept_info.get("based") == "asset":
+            return cls.generate_asset_script(
+                filepath=filepath,
+                department=department,
+                config_path=config_path,
+                project_path=project_path,
+                setting_data=setting_data,
+                shot_data=shot_data,
+                **kwargs,
+            )
 
         # 4. Resolve target version path and final/master path
         try:
@@ -675,3 +696,155 @@ class BuilderFactory:
                 target_version_path=version_path,
                 target_final_path=final_path,
             )
+
+    @classmethod
+    def generate_asset_script(
+        cls,
+        filepath: Union[str, Path],
+        department: str = "Asset",
+        config_path: Optional[Union[str, Path]] = None,
+        project_path: Optional[str] = None,
+        setting_data: Optional[Dict[str, Any]] = None,
+        shot_data: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> BuilderResult:
+
+        """Generate Blender setup script and resolve paths for an asset file."""
+        # 1. Load pipeline.yaml configuration
+        cfg_dict: Dict[str, Any] = {}
+        if config_path and Path(config_path).is_file():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg_dict = yaml.safe_load(f) or {}
+            except Exception as e:
+                logger.warning(f"Could not load config from {config_path}: {e}")
+
+        # 2. Resolve project mount root path
+        if not project_path:
+            mounts = cfg_dict.get("global", {}).get("mounts", {})
+            if sys.platform.startswith("linux"):
+                project_path = mounts.get("linux", "")
+            elif sys.platform.startswith("win32"):
+                project_path = mounts.get("windows", "")
+            elif sys.platform.startswith("darwin"):
+                project_path = mounts.get("darwin", "")
+            else:
+                project_path = mounts.get("linux", "")
+
+        # 3. Resolve target version path and final/master path
+        try:
+            from versioning import VersioningSystem
+        except ImportError:
+            try:
+                from Commands.versioning import VersioningSystem
+            except ImportError:
+                try:
+                    from pipeline.Commands.versioning import VersioningSystem
+                except ImportError:
+                    from ..versioning import VersioningSystem
+
+        final_path = VersioningSystem.get_master_path(filepath)
+        version_path = VersioningSystem.get_version_path(filepath, version=1)
+
+        # 4. Resolve department info
+        departments = cfg_dict.get("departments", {})
+        dept_info: Dict[str, Any] = {}
+        if department in departments:
+            dept_info = departments[department]
+        elif "Asset" in departments:
+            dept_info = departments["Asset"]
+        else:
+            dept_clean = department.lower().strip()
+            for k, v in departments.items():
+                if isinstance(v, dict):
+                    if k.lower() == dept_clean or str(v.get("code", "")).lower() == dept_clean:
+                        dept_info = v
+                        break
+
+        filepath_dict = {
+            "final": final_path,
+            "version": version_path,
+            "source": "",
+        }
+
+        asset_types = cfg_dict.get("asset_type", {})
+        raw_asset_dept = departments.get("Asset", {}) if isinstance(departments.get("Asset"), dict) else {}
+        asset_dept_payload = SafeAssetDepartment(
+            asset_types=asset_types,
+            raw_asset_dept=raw_asset_dept,
+            project_path=project_path,
+        )
+
+        global_cfg = cfg_dict.get("global", {})
+        builder = cls.get_builder(
+            department=department,
+            department_config=dept_info,
+            config_path=config_path,
+            project_path=project_path,
+            global_config=global_cfg,
+        )
+
+        current_dept_payload = {
+            department: dept_info,
+            **dept_info,
+        }
+
+        call_kwargs = dict(kwargs)
+        resolved_shot_data = call_kwargs.pop("shot_data", shot_data) or {}
+
+        try:
+            script = cls.invoke_builder_extract_data(
+                builder=builder,
+                asset_department=asset_dept_payload,
+                current_department=current_dept_payload,
+                shot_data=resolved_shot_data,
+                filepath=filepath_dict,
+                project_path=project_path,
+                setting_data=setting_data,
+                **call_kwargs,
+            )
+
+            return BuilderResult(
+                success=True,
+                message=f"Successfully generated builder script for asset:\n{version_path}",
+                script=script,
+                target_version_path=version_path,
+                target_final_path=final_path,
+                source_path="",
+            )
+        except Exception as e:
+            from .asset_builder import AssetBuilder
+
+            builtin_builder = AssetBuilder()
+            if builtin_builder and type(builtin_builder) is not type(builder):
+                try:
+                    script = cls.invoke_builder_extract_data(
+                        builder=builtin_builder,
+                        asset_department=asset_dept_payload,
+                        current_department=current_dept_payload,
+                        shot_data=resolved_shot_data,
+                        filepath=filepath_dict,
+                        project_path=project_path,
+                        setting_data=setting_data,
+                        **call_kwargs,
+                    )
+                    return BuilderResult(
+                        success=True,
+                        message=f"Successfully generated builder script for asset using built-in builder:\n{version_path}",
+                        script=script,
+                        target_version_path=version_path,
+                        target_final_path=final_path,
+                        source_path="",
+                    )
+                except Exception as ex:
+                    logger.error(f"Built-in Asset builder generation failed: {ex}")
+
+
+            logger.error(f"Asset builder script generation failed: {e}")
+            return BuilderResult(
+                success=False,
+                message=f"Asset builder generation failed: {e}",
+                target_version_path=version_path,
+                target_final_path=final_path,
+            )
+

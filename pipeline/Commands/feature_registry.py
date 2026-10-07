@@ -105,17 +105,31 @@ def handle_generate(
             except ImportError:
                 from .Builders.builder_factory import BuilderFactory
 
+    dept_clean = (department or "").lower().strip()
+    is_asset = dept_clean in ("asset", "assets") or "/01_asset/" in filepath or "\\01_asset\\" in filepath
+
     try:
-        res = BuilderFactory.generate_shot_script(
-            filepath=filepath,
-            department=department or "Layout",
-            shot_data=shot_data,
-            config_path=config_path,
-            project_path=project_path,
-            setting_data=setting_data,
-            builder_mode=builder_mode,
-            **kwargs,
-        )
+        if is_asset:
+            res = BuilderFactory.generate_asset_script(
+                filepath=filepath,
+                department=department or "Asset",
+                config_path=config_path,
+                project_path=project_path,
+                setting_data=setting_data,
+                shot_data=shot_data,
+                **kwargs,
+            )
+        else:
+            res = BuilderFactory.generate_shot_script(
+                filepath=filepath,
+                department=department or "Layout",
+                shot_data=shot_data,
+                config_path=config_path,
+                project_path=project_path,
+                setting_data=setting_data,
+                builder_mode=builder_mode,
+                **kwargs,
+            )
 
         return PipelineFeatureResult(
             success=res.success,
@@ -130,7 +144,8 @@ def handle_generate(
             },
         )
     except Exception as e:
-        return PipelineFeatureResult(success=False, message=f"Failed to generate shot file: {e}")
+        return PipelineFeatureResult(success=False, message=f"Failed to generate scene file: {e}")
+
 
 
 @register_feature(name="Up Version", description="Incrementally save next version file", order=10)
