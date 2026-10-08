@@ -31,6 +31,22 @@ class SettingsService:
         encrypted_pwd = cls._settings().value("kitsu/password_enc", "", type=str)
         return decrypt_string(encrypted_pwd)
 
+    @classmethod
+    def get_kitsu_notification_enabled(cls) -> bool:
+        """Check if Kitsu OS desktop notifications are enabled."""
+        val = cls._settings().value("kitsu/notification_enabled", True)
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, str):
+            return val.lower() in ("true", "1", "yes")
+        return bool(val)
+
+    @classmethod
+    def set_kitsu_notification_enabled(cls, enabled: bool) -> None:
+        """Persist whether Kitsu OS notifications should be active."""
+        cls._settings().setValue("kitsu/notification_enabled", bool(enabled))
+        cls._settings().sync()
+
     # ------------------------------------------------------------------
     # Software Configuration
     # ------------------------------------------------------------------

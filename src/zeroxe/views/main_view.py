@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 from zeroxe import config
 from zeroxe.api.update_api import UpdateAPI
+from zeroxe.services.notification_service import NotificationService
 from zeroxe.views.launcher_view import LauncherView
 from zeroxe.views.settings_view import SettingsView
 
@@ -70,6 +71,14 @@ class MainView(QMainWindow):
 
         self.settings = None
 
+        # Initialize native OS notification tray and Kitsu real-time listener
+        NotificationService.initialize(self)
+        NotificationService.start_kitsu_listener()
+
+    def closeEvent(self, event):
+        NotificationService.shutdown()
+        super().closeEvent(event)
+
     def _setup_ui(self):
         self.tab_widget = QTabWidget(self)
         self.launcher_view = LauncherView(self)
@@ -84,6 +93,10 @@ class MainView(QMainWindow):
         settings_action.triggered.connect(self.on_settings)
         edit_menu.addAction(settings_action)
 
+        self.notifications_menu = menubar.addMenu('&Notifications')
+        self._rebuild_menubar_notifications()
+        self.notifications_menu.aboutToShow.connect(self._rebuild_menubar_notifications)
+
         help_menu = menubar.addMenu('&Help')
         check_update_action = QAction('&Check for update', self)
         check_update_action.triggered.connect(self.on_check_update)
@@ -92,6 +105,35 @@ class MainView(QMainWindow):
         about_action = QAction('&About', self)
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
+
+    def _rebuild_menubar_notifications(self):
+        self.notifications_menu.clear()
+        notifications = NotificationService.get_notifications()
+        if not notifications:
+            empty_action = QAction("No recent notifications", self)
+            empty_action.setEnabled(False)
+            self.notifications_menu.addAction(empty_action)
+            return
+
+        for item in notifications[:15]:
+            ts = item.get("timestamp", "")
+            title = item.get("title", "")
+            msg = item.get("message", "")
+            preview = f"[{ts}] {title}: {msg}"
+            if len(preview) > 55:
+                preview = preview[:52] + "..."
+            action = QAction(preview, self)
+            action.triggered.connect(
+                lambda checked=False, it=item: NotificationService.show_notification_detail_dialog(
+                    it, parent=self
+                )
+            )
+            self.notifications_menu.addAction(action)
+
+        self.notifications_menu.addSeparator()
+        clear_action = QAction("Clear Notifications", self)
+        clear_action.triggered.connect(NotificationService.clear_notifications)
+        self.notifications_menu.addAction(clear_action)
 
     def on_settings(self):
         if self.settings is None:

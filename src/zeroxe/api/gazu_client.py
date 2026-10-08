@@ -1,6 +1,7 @@
 """Gazu / Kitsu API Client Module."""
 
 import logging
+import os
 from typing import Optional, Tuple
 import gazu
 from zeroxe.services.settings_service import SettingsService
@@ -86,6 +87,11 @@ def init_kitsu(
 
     try:
         gazu.set_host(kitsu_url)
+        event_host = os.getenv("KITSU_EVENT_HOST") or (
+            kitsu_url[:-4] if kitsu_url.endswith("/api") else kitsu_url
+        )
+        if hasattr(gazu, "set_event_host"):
+            gazu.set_event_host(event_host)
     except Exception as e:
         msg = f"Failed to set Kitsu host '{kitsu_url}': {e}"
         logger.warning(msg)

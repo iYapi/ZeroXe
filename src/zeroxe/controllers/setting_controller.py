@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from zeroxe import config
 from zeroxe.api.gazu_client import init_kitsu
+from zeroxe.services.notification_service import NotificationService
 from zeroxe.utils.log_util import show_error_dialog
 from zeroxe.utils.security import decrypt_string, encrypt_string
 
@@ -71,6 +72,10 @@ class SettingController(QObject):
         self.view.kitsu_ui.lineEdit_email.setText(kitsu_email)
         self.view.kitsu_ui.lineEdit_password.setText(kitsu_password)
 
+        if hasattr(self.view.kitsu_ui, "checkBox_notification"):
+            notification_enabled = self.settings.value("kitsu/notification_enabled", True, type=bool)
+            self.view.kitsu_ui.checkBox_notification.setChecked(bool(notification_enabled))
+
         # 2. Software Configuration
         blender_list = self.settings.value("software/blender_paths", [], type=list)
         active_blender = self.settings.value("software/active_blender", "", type=str)
@@ -103,6 +108,11 @@ class SettingController(QObject):
         self.settings.setValue("kitsu/url", kitsu_url)
         self.settings.setValue("kitsu/email", kitsu_email)
         self.settings.setValue("kitsu/password_enc", encrypted_password)
+        if hasattr(self.view.kitsu_ui, "checkBox_notification"):
+            self.settings.setValue(
+                "kitsu/notification_enabled",
+                self.view.kitsu_ui.checkBox_notification.isChecked(),
+            )
         # Ensure any old plaintext password key is wiped
         self.settings.remove("kitsu/password")
 
@@ -136,12 +146,14 @@ class SettingController(QObject):
         """Apply and persist changes."""
         self.save_settings()
         self.settings_changed.emit()
+        NotificationService.start_kitsu_listener()
         QMessageBox.information(self.view, "Settings", "Settings saved successfully.")
 
     def on_ok(self) -> None:
         """Apply changes and close dialog."""
         self.save_settings()
         self.settings_changed.emit()
+        NotificationService.start_kitsu_listener()
         self.view.close()
 
     def on_login_kitsu(self) -> None:
@@ -169,6 +181,7 @@ class SettingController(QObject):
                 # Automatically persist settings upon successful login
                 self.save_settings()
                 self.settings_changed.emit()
+                NotificationService.start_kitsu_listener()
                 QMessageBox.information(
                     self.view,
                     "Kitsu Login",

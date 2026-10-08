@@ -5,11 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/models/asset_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/models/asset_model.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/models/shot_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/models/shot_model.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/launcher_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/launcher_view.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/api/gazu_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/api/gazu_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/settings_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/settings_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/main_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/main_view.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/kitsu_setting.ui" beforeDir="false" afterPath="$PROJECT_DIR$/ui/kitsu_setting.ui" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -207,6 +207,7 @@
       <workItem from="1790925689157" duration="5599000" />
       <workItem from="1791168204151" duration="5110000" />
       <workItem from="1791340006306" duration="5627000" />
+      <workItem from="1791427538120" duration="615000" />
     </task>
     <servers />
   </component>
