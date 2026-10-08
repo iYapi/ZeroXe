@@ -11,7 +11,13 @@ APP_DISPLAY_NAME="Zeroxe"
 APP_DIR="${PROJECT_ROOT}/build/AppDir"
 DIST_DIR="${PROJECT_ROOT}/dist"
 APPIMAGE_TOOL="${PROJECT_ROOT}/build/appimagetool-x86_64.AppImage"
-ICON_SOURCE="${PROJECT_ROOT}/assets/icons/zeroxe.png"
+ICON_SOURCE=""
+for cand in "${PROJECT_ROOT}/assets/icons/icon.png" "${PROJECT_ROOT}/assets/icons/zeroxe.png" "${PROJECT_ROOT}/assets/icon.png" "${PROJECT_ROOT}/assets/zeroxe.png"; do
+    if [ -f "${cand}" ]; then
+        ICON_SOURCE="${cand}"
+        break
+    fi
+done
 
 echo "==> Building AppImage for ${APP_DISPLAY_NAME}..."
 
@@ -33,21 +39,34 @@ ${PYTHON_RUNNER} scripts/build_executable.py --onedir
 echo "==> Setting up AppDir directory tree..."
 rm -rf "${APP_DIR}"
 mkdir -p "${APP_DIR}/usr/bin"
+mkdir -p "${APP_DIR}/usr/share/applications"
+mkdir -p "${APP_DIR}/usr/share/pixmaps"
 mkdir -p "${APP_DIR}/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "${APP_DIR}/usr/share/icons/hicolor/512x512/apps"
+mkdir -p "${APP_DIR}/usr/share/icons/hicolor/scalable/apps"
 
 # 3. Copy compiled application files
 echo "==> Copying application payload into AppDir..."
 cp -r "${DIST_DIR}/${APP_NAME}/"* "${APP_DIR}/usr/bin/"
 
 # 4. Set up the Application Icon
-if [ -f "${ICON_SOURCE}" ]; then
-    cp "${ICON_SOURCE}" "${APP_DIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+if [ -n "${ICON_SOURCE}" ] && [ -f "${ICON_SOURCE}" ]; then
+    echo "==> Using application icon from ${ICON_SOURCE}..."
+    cp "${ICON_SOURCE}" "${APP_DIR}/.DirIcon"
     cp "${ICON_SOURCE}" "${APP_DIR}/${APP_NAME}.png"
+    cp "${ICON_SOURCE}" "${APP_DIR}/usr/share/pixmaps/${APP_NAME}.png"
+    cp "${ICON_SOURCE}" "${APP_DIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+    cp "${ICON_SOURCE}" "${APP_DIR}/usr/share/icons/hicolor/512x512/apps/${APP_NAME}.png"
+    cp "${ICON_SOURCE}" "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/${APP_NAME}.png"
 else
-    echo "==> [Warning] No icon found at ${ICON_SOURCE}. Generating fallback placeholder..."
+    echo "==> [Warning] No icon found. Generating fallback placeholder..."
     # 256x256 dummy 1-pixel PNG fallback
     echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > "${APP_DIR}/${APP_NAME}.png"
+    cp "${APP_DIR}/${APP_NAME}.png" "${APP_DIR}/.DirIcon"
+    cp "${APP_DIR}/${APP_NAME}.png" "${APP_DIR}/usr/share/pixmaps/${APP_NAME}.png"
     cp "${APP_DIR}/${APP_NAME}.png" "${APP_DIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+    cp "${APP_DIR}/${APP_NAME}.png" "${APP_DIR}/usr/share/icons/hicolor/512x512/apps/${APP_NAME}.png"
+    cp "${APP_DIR}/${APP_NAME}.png" "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/${APP_NAME}.png"
 fi
 
 # 5. Create Desktop Entry specification
@@ -60,9 +79,11 @@ Comment=Cross-platform Python/PySide6 Desktop Application
 Exec=${APP_NAME} %F
 Icon=${APP_NAME}
 Categories=Utility;Development;
-Terminal=true
+Terminal=false
 StartupNotify=true
+StartupWMClass=zeroxe
 EOF
+cp "${APP_DIR}/${APP_NAME}.desktop" "${APP_DIR}/usr/share/applications/${APP_NAME}.desktop"
 
 # 6. Create the AppRun Entry Script
 echo "==> Generating AppRun entrypoint..."
@@ -70,6 +91,8 @@ cat <<'EOF' > "${APP_DIR}/AppRun"
 #!/usr/bin/env bash
 SELF_DIR="$(dirname "$(readlink -f "${0}")")"
 export PATH="${SELF_DIR}/usr/bin:${PATH}"
+export APPDIR="${SELF_DIR}"
+export XDG_DATA_DIRS="${SELF_DIR}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # PyInstaller onedir sets up internal library paths automatically
 exec "${SELF_DIR}/usr/bin/zeroxe" "$@"
@@ -92,6 +115,9 @@ cd "${PROJECT_ROOT}"
 export ARCH=x86_64
 export APPIMAGE_EXTRACT_AND_RUN=1
 "${APPIMAGE_TOOL}" --appimage-extract-and-run --no-appstream "${APP_DIR}" "${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
+
+# Fix permissions for host user when running inside containers
+chmod -R a+rwX "${DIST_DIR}" 2>/dev/null || true
 
 echo "=================================================="
 echo "AppImage build completed successfully!"

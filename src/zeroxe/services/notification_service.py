@@ -809,12 +809,18 @@ class NotificationService:
         """Resolve a suitable application icon for system tray notification."""
         # 1. Check local assets if present
         for candidate in [
+            config.ASSETS_DIR / "icons" / "icon.png",
+            config.ASSETS_DIR / "icons" / "zeroxe.png",
             config.ASSETS_DIR / "icon.png",
             config.ASSETS_DIR / "zeroxe.png",
+            config.BASE_DIR / "assets" / "icons" / "icon.png",
+            config.BASE_DIR / "assets" / "icons" / "zeroxe.png",
             config.BASE_DIR / "assets" / "icon.png",
         ]:
             if candidate.is_file():
-                return QIcon(str(candidate))
+                icon = QIcon(str(candidate))
+                if not icon.isNull():
+                    return icon
 
         # 2. Check standard Qt application style icon
         app = QApplication.instance()

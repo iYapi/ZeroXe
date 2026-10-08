@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from zeroxe import config
 from zeroxe.api.update_api import UpdateAPI
 from zeroxe.services.notification_service import NotificationService
+from zeroxe.utils.icon_util import get_app_icon
 from zeroxe.views.launcher_view import LauncherView
 from zeroxe.views.notification_view import NotificationView
 from zeroxe.views.settings_view import SettingsView
@@ -64,6 +65,10 @@ class MainView(QMainWindow):
         super().__init__()
         self.setWindowTitle(config.APP_NAME)
         self.resize(800, 600)
+
+        app_icon = get_app_icon()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
 
         self.latest_update_info = None
 

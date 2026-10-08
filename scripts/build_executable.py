@@ -34,6 +34,21 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
     # Separator differs by OS (: on Linux/macOS, ; on Windows)
     sep = ";" if platform.system() == "Windows" else ":"
 
+    # Generate build_info.json stamping the compile date (YY.MM.DD)
+    import datetime
+    import json
+
+    now = datetime.datetime.now()
+    compile_version = now.strftime("%y.%m.%d")
+    build_info = {
+        "version": compile_version,
+        "compiled_at": now.isoformat(),
+        "build_type": "onefile" if onefile else "onedir",
+    }
+    build_info_file = PROJECT_ROOT / "build_info.json"
+    build_info_file.write_text(json.dumps(build_info, indent=2), encoding="utf-8")
+    print(f"==> Stamped compile version: {compile_version} into build_info.json")
+
     pyinstaller_cmd = [
         sys.executable,
         "-m",
@@ -47,6 +62,22 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
         # Ensure root of src is resolvable for 'zeroxe.*' imports
         f"--paths={SRC_DIR}",
     ]
+
+    # Embed build_info.json
+    if build_info_file.exists():
+        pyinstaller_cmd.append(f"--add-data={build_info_file}{sep}.")
+
+    # Add icon to PyInstaller binary if found
+    for icon_cand in (
+        ASSETS_DIR / "icons" / "icon.png",
+        ASSETS_DIR / "icons" / "zeroxe.png",
+        ASSETS_DIR / "icons" / "icon.ico",
+        ASSETS_DIR / "icon.png",
+    ):
+        if icon_cand.exists():
+            pyinstaller_cmd.append(f"--icon={icon_cand}")
+            print(f"==> Embedding icon: {icon_cand}")
+            break
 
     # Bundle assets (icons, styles) if directory exists
     if ASSETS_DIR.exists() and any(ASSETS_DIR.iterdir()):
@@ -62,10 +93,12 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
         "PySide6.QtGui",
         "PySide6.QtWidgets",
         "zeroxe.api",
-        "zeroxe.cli",
-        "zeroxe.views",
+        "zeroxe.controllers",
+        "zeroxe.models",
         "zeroxe.services",
+        "zeroxe.ui",
         "zeroxe.utils",
+        "zeroxe.views",
         "packaging",
         "packaging.version",
         "requests",
