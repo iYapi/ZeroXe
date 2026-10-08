@@ -37,3 +37,17 @@ Welcome to the **ZeroXe** project documentation.
    - Step-by-step adding custom features with `@register_feature`
    - Cooperative locks, path resolvers, presets, and NAS deployment
 
+6. **[Lighting Builder & FG Asset Batch Generation Guide](file:///home/iyapi/Documents/Project/2026/remake/ZeroXe/docs/LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md)**
+   - Lighting scene generation architecture & view layer presets
+   - Foreground (`fg`) and Background (`bg`) collection hierarchy
+   - Single shot interactive modal (`LightingAssetDialog`)
+   - Batch generation using YAML mapping files (Per-Shot, Global, Per-Sequence, Wildcards)
+   - Auto-discovery mechanism & CLI usage
+
+7. **[Notification & Kitsu Real-Time Event System Guide](file:///home/iyapi/Documents/Project/2026/remake/ZeroXe/docs/NOTIFICATION_SYSTEM_GUIDE.md)**
+   - Native OS desktop notifications via `QSystemTrayIcon`
+   - Dedicated background Socket.IO worker (`KitsuNotificationWorker`)
+   - Intelligent user filtering (ignores self-actions, targets assigned tasks)
+   - Real-time data hydration & project code formatting
+   - Centralized notification history & detail inspection modal
+
