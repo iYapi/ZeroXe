@@ -165,6 +165,13 @@ def hydrate_kitsu_event(event_name: str, data: Any) -> dict:
                     "project_code",
                     "project_short_name",
                     "entity_name",
+                    "sequence_name",
+                    "episode_name",
+                    "sequence_id",
+                    "episode_id",
+                    "sequence",
+                    "episode",
+                    "parent_id",
                     "task_type_name",
                     "task_type_id",
                     "task_status_name",
@@ -177,6 +184,11 @@ def hydrate_kitsu_event(event_name: str, data: Any) -> dict:
                 ]:
                     if task_full.get(key) and not enriched.get(key):
                         enriched[key] = task_full[key]
+
+                if isinstance(task_full.get("sequence"), dict) and not enriched.get("sequence_name"):
+                    enriched["sequence_name"] = task_full["sequence"].get("name", "")
+                if isinstance(task_full.get("episode"), dict) and not enriched.get("episode_name"):
+                    enriched["episode_name"] = task_full["episode"].get("name", "")
 
                 if not isinstance(enriched.get("task"), dict) or not enriched["task"].get("task_type_name"):
                     enriched["task"] = task_full
@@ -247,31 +259,90 @@ def hydrate_kitsu_event(event_name: str, data: Any) -> dict:
                             "project_code",
                             "project_short_name",
                             "entity_name",
+                            "sequence_name",
+                            "episode_name",
+                            "sequence_id",
+                            "episode_id",
+                            "entity_id",
+                            "project_id",
+                            "task_id",
                             "task_type_name",
                             "task_status_name",
                             "assignees",
                         ]:
                             if t_full.get(key) and not enriched.get(key):
                                 enriched[key] = t_full[key]
+
+                        if isinstance(t_full.get("sequence"), dict) and not enriched.get("sequence_name"):
+                            enriched["sequence_name"] = t_full["sequence"].get("name", "")
+                        if isinstance(t_full.get("episode"), dict) and not enriched.get("episode_name"):
+                            enriched["episode_name"] = t_full["episode"].get("name", "")
         except Exception as e:
             logger.debug(f"Could not hydrate comment {comment_id}: {e}")
 
-    # 5. Resolve Entity ID if entity_name still missing
+    # 5. Resolve Entity ID (and hierarchy: sequence, episode)
     entity_id = (
         enriched.get("entity_id")
         or (enriched.get("entity", {}).get("id") if isinstance(enriched.get("entity"), dict) else None)
         or enriched.get("shot_id")
         or enriched.get("asset_id")
     )
-    if entity_id and isinstance(entity_id, str) and not enriched.get("entity_name"):
+    if entity_id and isinstance(entity_id, str):
+        if not enriched.get("entity_name") or not enriched.get("sequence_name") or not enriched.get("episode_name"):
+            try:
+                ent = gazu.entity.get_entity(entity_id)
+                if ent and isinstance(ent, dict):
+                    if not enriched.get("entity_name"):
+                        enriched["entity_name"] = ent.get("name", "")
+                    if not enriched.get("entity"):
+                        enriched["entity"] = ent
+
+                    if ent.get("sequence_name") and not enriched.get("sequence_name"):
+                        enriched["sequence_name"] = ent["sequence_name"]
+                    if ent.get("episode_name") and not enriched.get("episode_name"):
+                        enriched["episode_name"] = ent["episode_name"]
+                    if isinstance(ent.get("sequence"), dict) and not enriched.get("sequence_name"):
+                        enriched["sequence_name"] = ent["sequence"].get("name", "")
+                    if isinstance(ent.get("episode"), dict) and not enriched.get("episode_name"):
+                        enriched["episode_name"] = ent["episode"].get("name", "")
+
+                    # For shots, parent is sequence, and sequence parent is episode
+                    parent_id = ent.get("parent_id") or ent.get("sequence_id")
+                    if parent_id and isinstance(parent_id, str) and not enriched.get("sequence_name"):
+                        try:
+                            parent_ent = gazu.entity.get_entity(parent_id)
+                            if parent_ent and isinstance(parent_ent, dict):
+                                enriched.setdefault("sequence_name", parent_ent.get("name", ""))
+                                ep_id = parent_ent.get("parent_id") or parent_ent.get("episode_id")
+                                if ep_id and isinstance(ep_id, str) and not enriched.get("episode_name"):
+                                    ep_ent = gazu.entity.get_entity(ep_id)
+                                    if ep_ent and isinstance(ep_ent, dict):
+                                        enriched.setdefault("episode_name", ep_ent.get("name", ""))
+                        except Exception as err:
+                            logger.debug(f"Could not hydrate parent sequence {parent_id}: {err}")
+            except Exception as e:
+                logger.debug(f"Could not hydrate entity {entity_id}: {e}")
+
+    # 5b. Direct sequence_id / episode_id resolution fallback
+    if enriched.get("sequence_id") and isinstance(enriched.get("sequence_id"), str) and not enriched.get("sequence_name"):
         try:
-            ent = gazu.entity.get_entity(entity_id)
-            if ent and isinstance(ent, dict):
-                enriched["entity_name"] = ent.get("name", "")
-                if not enriched.get("entity"):
-                    enriched["entity"] = ent
+            seq_obj = gazu.entity.get_entity(enriched["sequence_id"])
+            if seq_obj and isinstance(seq_obj, dict):
+                enriched["sequence_name"] = seq_obj.get("name", "")
+                if seq_obj.get("parent_id") and not enriched.get("episode_name"):
+                    ep_obj = gazu.entity.get_entity(seq_obj["parent_id"])
+                    if ep_obj and isinstance(ep_obj, dict):
+                        enriched["episode_name"] = ep_obj.get("name", "")
         except Exception as e:
-            logger.debug(f"Could not hydrate entity {entity_id}: {e}")
+            logger.debug(f"Could not hydrate sequence_id {enriched.get('sequence_id')}: {e}")
+
+    if enriched.get("episode_id") and isinstance(enriched.get("episode_id"), str) and not enriched.get("episode_name"):
+        try:
+            ep_obj = gazu.entity.get_entity(enriched["episode_id"])
+            if ep_obj and isinstance(ep_obj, dict):
+                enriched["episode_name"] = ep_obj.get("name", "")
+        except Exception as e:
+            logger.debug(f"Could not hydrate episode_id {enriched.get('episode_id')}: {e}")
 
     # 6. Resolve Project ID if project_code or project_name still missing
     project_id = (
@@ -320,7 +391,7 @@ def parse_kitsu_event(event_name: str, data: Any) -> Tuple[str, str]:
     elif person_obj:
         author_name = str(person_obj).strip()
 
-    # 2. Context resolution (Project / Entity / Task)
+    # 2. Context resolution (Project / Episode / Sequence / Entity / Task)
     task_obj = data.get("task")
     task_type_obj = data.get("task_type") or (
         task_obj.get("task_type") if isinstance(task_obj, dict) else None
@@ -373,6 +444,33 @@ def parse_kitsu_event(event_name: str, data: Any) -> Tuple[str, str]:
     else:
         entity_name = str(data.get("entity_name") or data.get("shot_name") or data.get("asset_name") or "").strip()
 
+    # 2d. Resolve Episode and Sequence
+    ep_val = (
+        data.get("episode")
+        or data.get("episode_name")
+        or (data.get("entity", {}).get("episode") if isinstance(data.get("entity"), dict) else None)
+        or (data.get("task", {}).get("episode") if isinstance(data.get("task"), dict) else None)
+    )
+    if isinstance(ep_val, dict):
+        episode_name = str(ep_val.get("name") or "").strip()
+    elif ep_val:
+        episode_name = str(ep_val).strip()
+    else:
+        episode_name = ""
+
+    seq_val = (
+        data.get("sequence")
+        or data.get("sequence_name")
+        or (data.get("entity", {}).get("sequence") if isinstance(data.get("entity"), dict) else None)
+        or (data.get("task", {}).get("sequence") if isinstance(data.get("task"), dict) else None)
+    )
+    if isinstance(seq_val, dict):
+        sequence_name = str(seq_val.get("name") or "").strip()
+    elif seq_val:
+        sequence_name = str(seq_val).strip()
+    else:
+        sequence_name = ""
+
     project_obj = data.get("project")
     project_label = ""
     if isinstance(project_obj, dict):
@@ -395,7 +493,33 @@ def parse_kitsu_event(event_name: str, data: Any) -> Tuple[str, str]:
             or ""
         ).strip()
 
-    context_parts = [p for p in [project_label, entity_name, task_name] if p]
+    context_parts = []
+    if project_label:
+        context_parts.append(project_label)
+
+    # Add Episode if present
+    if episode_name:
+        if (
+            not entity_name.lower().startswith(f"{episode_name.lower()}_")
+            and entity_name.lower() != episode_name.lower()
+        ):
+            context_parts.append(episode_name)
+
+    # Add Sequence if present
+    if sequence_name:
+        if (
+            not entity_name.lower().startswith(f"{sequence_name.lower()}_")
+            and entity_name.lower() != sequence_name.lower()
+            and f"_{sequence_name.lower()}_" not in entity_name.lower()
+        ):
+            context_parts.append(sequence_name)
+
+    if entity_name:
+        context_parts.append(entity_name)
+
+    if task_name:
+        context_parts.append(task_name)
+
     context_str = " | ".join(context_parts)
 
     # 3. Event-specific formatting
@@ -617,8 +741,17 @@ class KitsuNotificationWorker(QThread):
             self.wait(500)
 
 
+class NotificationServiceSignals(QObject):
+    """Signals for NotificationService events."""
+
+    history_updated = Signal()
+    notification_added = Signal(dict)
+
+
 class NotificationService:
     """Centralized service for managing Desktop OS Notifications and Kitsu listeners."""
+
+    signals = NotificationServiceSignals()
 
     _tray_icon: Optional[QSystemTrayIcon] = None
     _worker: Optional[KitsuNotificationWorker] = None
@@ -803,6 +936,7 @@ class NotificationService:
         """Clear stored notification history."""
         cls._history.clear()
         cls._rebuild_notification_menu()
+        cls.signals.history_updated.emit()
 
     @classmethod
     def get_notifications(cls) -> List[dict]:
@@ -850,6 +984,8 @@ class NotificationService:
             cls._history.pop()
 
         cls._rebuild_notification_menu()
+        cls.signals.history_updated.emit()
+        cls.signals.notification_added.emit(record)
 
         # 2. Native OS System Notification (pops in OS notification center / tray)
         if cls._tray_icon is not None:

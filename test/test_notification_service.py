@@ -143,6 +143,40 @@ class TestNotificationParser(unittest.TestCase):
         self.assertTrue(len(message) <= 250)
         self.assertTrue(message.endswith("..."))
 
+    def test_parse_with_episode_and_sequence(self):
+        payload = {
+            "project": {"code": "MDT"},
+            "episode": "ep998",
+            "sequence": "sq01",
+            "entity": {"name": "sh010"},
+            "task": {"name": "Lighting"},
+            "text": "Review note",
+        }
+        title, _ = parse_kitsu_event("comment:new", payload)
+        self.assertEqual(title, "New Comment (MDT | ep998 | sq01 | sh010 | Lighting)")
+
+    def test_parse_with_sequence_only(self):
+        payload = {
+            "project": {"code": "MDT"},
+            "sequence": "sq02",
+            "entity": {"name": "sh030"},
+            "task": {"name": "Animation"},
+        }
+        title, _ = parse_kitsu_event("task:new", payload)
+        self.assertEqual(title, "New Task Assigned (MDT | sq02 | sh030 | Animation)")
+
+    def test_parse_with_episode_and_composite_shot_name(self):
+        # Sequence name is already in entity name (sq01_sh010), so sq01 is not duplicated
+        payload = {
+            "project": {"code": "MDT"},
+            "episode": "ep998",
+            "sequence": "sq01",
+            "entity": {"name": "sq01_sh010"},
+            "task": {"name": "Lighting"},
+        }
+        title, _ = parse_kitsu_event("task:update", payload)
+        self.assertEqual(title, "Task Updated (MDT | ep998 | sq01_sh010 | Lighting)")
+
 
 class TestEventHydration(unittest.TestCase):
     """Test suite for resolving raw Kitsu event IDs via Gazu."""
@@ -158,6 +192,8 @@ class TestEventHydration(unittest.TestCase):
             "name": "Animation",
             "task_type_name": "Animation",
             "entity_name": "sq01_sh010",
+            "sequence_name": "sq01",
+            "episode_name": "ep998",
             "project_name": "ZeroXeProject",
             "project_code": "ZRX",
             "task_status_name": "WIP",
@@ -179,8 +215,53 @@ class TestEventHydration(unittest.TestCase):
         enriched = hydrate_kitsu_event("task:update", raw_event)
         title, message = parse_kitsu_event("task:update", enriched)
 
-        self.assertEqual(title, "Task Updated (ZRX | sq01_sh010 | Animation)")
+        self.assertEqual(title, "Task Updated (ZRX | ep998 | sq01_sh010 | Animation)")
         self.assertEqual(message, "Alice Lead changed status to: Approved")
+
+    @patch("gazu.entity.get_entity")
+    @patch("gazu.task.get_comment")
+    @patch("gazu.task.get_task")
+    @patch("gazu.person.get_person")
+    def test_hydrate_hierarchy_via_parent_entity(self, mock_get_person, mock_get_task, mock_get_comment, mock_get_entity):
+        from zeroxe.services.notification_service import hydrate_kitsu_event
+
+        mock_get_comment.return_value = {
+            "id": "comment-001",
+            "text": "Great lighting pass!",
+            "task_id": "task-001",
+            "person_id": "person-002",
+        }
+        mock_get_task.return_value = {
+            "id": "task-001",
+            "name": "Lighting",
+            "task_type_name": "Lighting",
+            "entity_id": "shot-001",
+            "project_name": "ZeroXeProject",
+            "project_code": "ZRX",
+        }
+        mock_get_person.return_value = {
+            "id": "person-002",
+            "first_name": "Bob",
+            "last_name": "Reviewer",
+        }
+
+        def mock_entity_lookup(entity_id):
+            if entity_id == "shot-001":
+                return {"id": "shot-001", "name": "sh020", "parent_id": "seq-001"}
+            elif entity_id == "seq-001":
+                return {"id": "seq-001", "name": "sq02", "parent_id": "ep-001"}
+            elif entity_id == "ep-001":
+                return {"id": "ep-001", "name": "ep998"}
+            return {}
+
+        mock_get_entity.side_effect = mock_entity_lookup
+
+        raw_event = {"comment_id": "comment-001"}
+        enriched = hydrate_kitsu_event("comment:new", raw_event)
+        title, message = parse_kitsu_event("comment:new", enriched)
+
+        self.assertEqual(title, "New Comment (ZRX | ep998 | sq02 | sh020 | Lighting)")
+        self.assertEqual(message, "Bob Reviewer: Great lighting pass!")
 
     @patch("gazu.task.get_comment")
     @patch("gazu.task.get_task")
