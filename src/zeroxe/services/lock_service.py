@@ -36,6 +36,9 @@ class LockService:
     @classmethod
     def get_current_user(cls) -> UserIdentity:
         """Resolve current user identity from Kitsu or fallback to local environment."""
+        if cls._cached_user is not None:
+            return cls._cached_user
+
         kitsu_id = ""
         user_name = ""
         user_email = SettingsService.get_kitsu_email()
@@ -68,12 +71,20 @@ class LockService:
             else:
                 user_name = getpass.getuser()
 
-        return UserIdentity(
+        identity = UserIdentity(
             kitsu_id=kitsu_id,
             name=user_name,
             email=user_email,
             workstation=workstation,
         )
+        if kitsu_id or user_name:
+            cls._cached_user = identity
+        return identity
+
+    @classmethod
+    def clear_user_cache(cls) -> None:
+        """Clear cached user identity."""
+        cls._cached_user = None
 
     @classmethod
     def build_entity_key(
@@ -324,4 +335,62 @@ class LockService:
                 logger.warning(f"Fallback LockManager get_history error: {e}")
 
         return {"versions": [], "activity_log": []}
+
+    @classmethod
+    def record_version(
+        cls,
+        entity_key: str,
+        version: str,
+        file_path: str,
+        comment: str = "",
+        file_size_mb: float = 0.0,
+        project_name: Optional[str] = None,
+        project_path: Optional[str] = None,
+    ) -> bool:
+        """Record a newly generated or updated version in the entity history JSON."""
+        user = cls.get_current_user()
+        config_path = PipelineService.get_active_pipeline_yaml_path(project_name=project_name)
+        module = PipelineService.load_pipeline_module(project_name=project_name)
+
+        if module and hasattr(module, "record_version"):
+            try:
+                return bool(
+                    module.record_version(
+                        entity_key=entity_key,
+                        kitsu_id=user.kitsu_id,
+                        name=user.name,
+                        version=version,
+                        file_path=file_path,
+                        comment=comment,
+                        file_size_mb=file_size_mb,
+                        workstation=user.workstation,
+                        project_path=project_path,
+                        config_path=config_path,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Pipeline module record_version error: {e}")
+
+        if config_path and config_path.is_file():
+            try:
+                from pipeline.Commands.Locks.lock_manager import LockManager
+
+                mgr = LockManager(pipeline_root=config_path.parent)
+                return mgr.record_version(
+                    entity_key=entity_key,
+                    kitsu_id=user.kitsu_id,
+                    name=user.name,
+                    version=version,
+                    file_path=file_path,
+                    comment=comment,
+                    file_size_mb=file_size_mb,
+                    workstation=user.workstation,
+                    project_path=project_path,
+                    config_path=config_path,
+                )
+            except Exception as e:
+                logger.warning(f"Fallback LockManager record_version error: {e}")
+
+        return False
+
 

@@ -756,11 +756,45 @@ class PipelineService:
             success = (proc.returncode == 0)
             if "Traceback (most recent call last):" in output or "Error: Python:" in output:
                 success = False
+
+            # Write dedicated process log
+            try:
+                from zeroxe.utils.log_util import write_process_log
+                write_process_log(
+                    category="pipeline",
+                    process_name="blender_headless",
+                    content=f"Script Content:\n{script}\n\nExecution Output:\n{output}",
+                    command=[active_blender, "-b", "--python", str(tmp_file)],
+                    exit_code=proc.returncode,
+                )
+            except Exception:
+                pass
+
             return success, output
         except subprocess.TimeoutExpired:
-            return False, f"Blender execution timed out after {timeout} seconds."
+            msg = f"Blender execution timed out after {timeout} seconds."
+            try:
+                from zeroxe.utils.log_util import write_process_log
+                write_process_log(
+                    category="pipeline",
+                    process_name="blender_timeout",
+                    content=msg,
+                )
+            except Exception:
+                pass
+            return False, msg
         except Exception as e:
-            return False, f"Failed to execute Blender script: {e}"
+            msg = f"Failed to execute Blender script: {e}"
+            try:
+                from zeroxe.utils.log_util import write_process_log
+                write_process_log(
+                    category="pipeline",
+                    process_name="blender_exception",
+                    content=msg,
+                )
+            except Exception:
+                pass
+            return False, msg
         finally:
             if tmp_file and tmp_file.is_file():
                 try:
@@ -807,6 +841,7 @@ class PipelineService:
         department: Optional[str] = None,
         project_name: Optional[str] = None,
         setting_data: Optional[Dict[str, Any]] = None,
+        parent: Optional[Any] = None,
         **kwargs: Any,
     ) -> Tuple[bool, str, Optional[str]]:
         """Send feature execution request directly to the external pipeline loaded via zeroxe_map.yaml.
@@ -870,7 +905,27 @@ class PipelineService:
             if not active_blender or not Path(active_blender).is_file():
                 return True, msg or f"Script generated successfully for '{feature_name}'", target_path
 
-            dcc_success, dcc_output = cls.execute_blender_script(script)
+            # If parent window is provided and Qt Application exists, show animated loading popup
+            # during headless Blender execution so the UI never freezes
+            try:
+                from PySide6.QtWidgets import QApplication
+                app = QApplication.instance()
+                if parent is not None and app is not None:
+                    from zeroxe.ui.loading_dialog import run_async_task
+                    dcc_success, dcc_output = run_async_task(
+                        parent=parent,
+                        title=f"{feature_name}",
+                        message=f"Executing '{feature_name}' in Blender...",
+                        task_func=cls.execute_blender_script,
+                        script=script,
+                        blender_path=active_blender,
+                    )
+                else:
+                    dcc_success, dcc_output = cls.execute_blender_script(script, blender_path=active_blender)
+            except Exception as ex:
+                logger.warning(f"Async DCC execution error: {ex}")
+                dcc_success, dcc_output = cls.execute_blender_script(script, blender_path=active_blender)
+
             if not dcc_success:
                 return False, f"Blender execution error:\n\n{dcc_output}", target_path
 

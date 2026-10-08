@@ -13,8 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from PySide6.QtCore import QEvent, QObject, QProcess, QRunnable, QThreadPool, Qt, Signal
-from PySide6.QtGui import QPixmap, QStandardItem
+from PySide6.QtCore import QEvent, QObject, QProcess, QRunnable, QThreadPool, QTimer, Qt, Signal
+from PySide6.QtGui import QImage, QPixmap, QStandardItem
 from PySide6.QtWidgets import QAbstractItemView, QMessageBox
 
 from zeroxe.models.asset_model import Asset, AssetType
@@ -28,7 +28,14 @@ from zeroxe.services.pipeline_service import PipelineService
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.settings_service import SettingsService
 from zeroxe.services.shot_service import ShotService
-from zeroxe.utils.log_util import extract_error_summary, show_error_dialog
+from zeroxe.ui.loading_dialog import run_async_task
+from zeroxe.utils.log_util import (
+    append_process_log,
+    create_process_log_file,
+    extract_error_summary,
+    show_error_dialog,
+    write_process_log,
+)
 
 if TYPE_CHECKING:
     from zeroxe.views.launcher_view import LauncherView
@@ -96,8 +103,8 @@ class PreviewDownloadRunnable(QRunnable):
 
             # Check if valid image already exists on disk
             if dest.is_file() and dest.stat().st_size > 0:
-                pixmap = QPixmap(dest_path)
-                if not pixmap.isNull():
+                img = QImage(dest_path)
+                if not img.isNull():
                     self.signals.finished.emit(self.item_id, target_id, dest_path)
                     return
                 else:
@@ -119,8 +126,8 @@ class PreviewDownloadRunnable(QRunnable):
                 try:
                     download_func(target_id, dest_path)
                     if dest.is_file() and dest.stat().st_size > 0:
-                        pixmap = QPixmap(dest_path)
-                        if not pixmap.isNull():
+                        img = QImage(dest_path)
+                        if not img.isNull():
                             downloaded = True
                             break
                         else:
@@ -279,7 +286,12 @@ class LauncherController(QObject):
         """Fetch projects via ProjectService and populate project_model with zeroxe_map.yaml fallback."""
         self.view.project_model.clear()
         try:
-            projects = ProjectService.get_all_projects()
+            projects = run_async_task(
+                parent=self.view,
+                title="Loading Projects",
+                message="Fetching project catalog from Kitsu...",
+                task_func=ProjectService.get_all_projects,
+            )
         except Exception as e:
             logger.error(f"Failed to fetch projects: {e}")
             projects = []
@@ -313,7 +325,12 @@ class LauncherController(QObject):
         """Fetch departments via DepartmentService and populate department_model with pipeline.yaml fallback."""
         self.view.department_model.clear()
         try:
-            departments = DepartmentService.get_all_departments()
+            departments = run_async_task(
+                parent=self.view,
+                title="Loading Departments",
+                message="Fetching department list from Kitsu...",
+                task_func=DepartmentService.get_all_departments,
+            )
         except Exception as e:
             logger.error(f"Failed to fetch departments: {e}")
             departments = []
@@ -358,7 +375,16 @@ class LauncherController(QObject):
         if project_id:
             if self.is_shot_mode:
                 try:
-                    self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
+                    if project_id in ShotService._episode_cache:
+                        self.current_episodes = ShotService.get_episodes_by_project_id(project_id)
+                    else:
+                        self.current_episodes = run_async_task(
+                            self.view,
+                            "Loading Episodes",
+                            "Fetching episodes from Kitsu...",
+                            ShotService.get_episodes_by_project_id,
+                            project_id,
+                        ) or []
                 except Exception as e:
                     logger.error(f"Failed to fetch episodes for project {project_id}: {e}")
                     self.current_episodes = []
@@ -367,7 +393,16 @@ class LauncherController(QObject):
                     category_items.extend([ep.name for ep in self.current_episodes if ep.name])
             else:
                 try:
-                    self.current_asset_types = AssetService.get_asset_types_by_project_id(project_id)
+                    if project_id in AssetService._asset_type_cache:
+                        self.current_asset_types = AssetService.get_asset_types_by_project_id(project_id)
+                    else:
+                        self.current_asset_types = run_async_task(
+                            self.view,
+                            "Loading Asset Types",
+                            "Fetching asset types from Kitsu...",
+                            AssetService.get_asset_types_by_project_id,
+                            project_id,
+                        ) or []
                 except Exception as e:
                     logger.error(f"Failed to fetch asset types for project {project_id}: {e}")
                     self.current_asset_types = []
@@ -406,7 +441,26 @@ class LauncherController(QObject):
         try:
             target_ep = next((ep for ep in self.current_episodes if ep.name == selected_category), None)
             if target_ep:
-                shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
+                if target_ep.id in ShotService._shot_cache:
+                    shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
+                else:
+                    shots = run_async_task(
+                        self.view,
+                        "Loading Shots",
+                        f"Fetching shots for episode '{target_ep.name}'...",
+                        ShotService.get_shots_by_episode_id,
+                        target_ep.id,
+                        episode_name=target_ep.name,
+                    ) or []
+            elif self.current_project:
+                shots = run_async_task(
+                    self.view,
+                    "Loading Shots",
+                    f"Fetching shots for episode '{selected_category}'...",
+                    ShotService.get_shots_by_sequence,
+                    episode=selected_category,
+                    project_id=self.current_project.id,
+                ) or []
         except Exception as e:
             logger.error(f"Failed to fetch shots: {e}")
 
@@ -441,10 +495,20 @@ class LauncherController(QObject):
 
         assets: List[Asset] = []
         try:
-            assets = AssetService.get_assets_by_type(
-                self.current_project.id,
-                asset_type_name=selected_category,
-            )
+            if self.current_project.id in AssetService._asset_cache:
+                assets = AssetService.get_assets_by_type(
+                    self.current_project.id,
+                    asset_type_name=selected_category,
+                ) or []
+            else:
+                assets = run_async_task(
+                    self.view,
+                    "Loading Assets",
+                    f"Fetching assets for category '{selected_category}'...",
+                    AssetService.get_assets_by_type,
+                    self.current_project.id,
+                    asset_type_name=selected_category,
+                ) or []
         except Exception as e:
             logger.error(f"Failed to fetch assets: {e}")
 
@@ -665,14 +729,19 @@ class LauncherController(QObject):
         self.view.item_source_model.clear()
         self._clear_item_details()
         if self.current_project:
-            self.load_categories(self.current_project.id)
-            self.load_items()
+            QTimer.singleShot(0, lambda: (self.load_categories(self.current_project.id), self.load_items()))
 
     def on_category_changed(self, category_text: str) -> None:
         """Handle category (episode or asset type) selection change."""
         self.view.item_source_model.clear()
         self._clear_item_details()
-        self.load_items()
+        # Defer execution with 50ms debounce so combobox popup closes and releases grabs cleanly
+        if not hasattr(self, "_category_debounce_timer"):
+            self._category_debounce_timer = QTimer(self)
+            self._category_debounce_timer.setSingleShot(True)
+            self._category_debounce_timer.timeout.connect(self.load_items)
+        self._category_debounce_timer.stop()
+        self._category_debounce_timer.start(50)
 
     def on_item_selected(self, current, previous) -> None:
         """Handle item (shot or asset) selection."""
@@ -972,169 +1041,211 @@ class LauncherController(QObject):
                 # User cancelled batch dialog/confirmation
                 return
 
-            success_list = []
-            failed_list = []
+            batch_kwargs["show_ui"] = False
 
-            for item in selected_items:
-                try:
-                    target_filepath = None
-                    item_key = None
-                    item_label = ""
+            def _run_batch_job(progress_callback=None, is_cancelled=None):
+                total = len(selected_items)
+                batch_success = []
+                batch_failed = []
+                batch_logs = [f"=== Batch {action} Execution (Total: {total}) ==="]
 
-                    shot_data_dict = None
-                    if isinstance(item, Shot):
-                        ep = item.episode or self.view.ui.comboBox_category.currentText()
-                        sq = item.sequence or ""
-                        sh = item.name
-                        item_label = f"{sq}_{sh}" if sq else sh
+                for idx, item in enumerate(selected_items):
+                    if is_cancelled and is_cancelled():
+                        batch_logs.append(f"\n[Batch cancelled by user at item {idx+1}/{total}]")
+                        break
 
-                        shot_res = PipelineService.resolve_shot(
+                    item_label = getattr(item, "name", f"Item #{idx+1}")
+                    if progress_callback:
+                        progress_callback(idx + 1, total, f"Processing {item_label} ({idx+1}/{total})...")
+
+                    try:
+                        target_filepath = None
+                        item_key = None
+                        shot_data_dict = None
+
+                        if isinstance(item, Shot):
+                            ep = item.episode or self.view.ui.comboBox_category.currentText()
+                            sq = item.sequence or ""
+                            sh = item.name
+                            item_label = f"{sq}_{sh}" if sq else sh
+
+                            shot_res = PipelineService.resolve_shot(
+                                department=dept_name,
+                                episode=ep,
+                                sequence=sq,
+                                shot=sh,
+                                project_name=proj_name,
+                            )
+                            versions = PipelineService.list_versions(
+                                department=dept_name,
+                                episode=ep,
+                                sequence=sq,
+                                shot=sh,
+                                project_name=proj_name,
+                            )
+                            target_filepath = str(versions[-1][1]) if versions else str(shot_res.master_path)
+                            item_key = LockService.build_entity_key(
+                                department=dept_name,
+                                episode=ep,
+                                sequence=sq,
+                                shot=sh,
+                                project_name=proj_name,
+                            )
+
+                            assets = list(item.assets) if item.assets else []
+                            if not assets and item.id:
+                                try:
+                                    from zeroxe.services.shot_service import ShotService
+                                    assets = ShotService.get_assets_for_shot(item.id)
+                                except Exception:
+                                    pass
+
+                            formatted_assets = []
+                            for a in assets:
+                                if isinstance(a, dict):
+                                    formatted_assets.append(a)
+                                elif hasattr(a, "name"):
+                                    formatted_assets.append({
+                                        "id": getattr(a, "id", ""),
+                                        "name": getattr(a, "name", ""),
+                                        "entity_type_id": getattr(a, "entity_type_id", getattr(a, "asset_type_id", "")),
+                                        "asset_type": getattr(a, "asset_type", ""),
+                                    })
+
+                            shot_data_dict = {
+                                "id": item.id,
+                                "name": item.name,
+                                "sequence": sq,
+                                "episode": ep,
+                                "assets": formatted_assets,
+                                "data": {
+                                    "frame_in": item.frame_in,
+                                    "frame_out": item.frame_out,
+                                    "fps": item.fps,
+                                    "resolution": item.resolution,
+                                },
+                            }
+
+                        elif isinstance(item, Asset):
+                            at_type = item.asset_type or self.view.ui.comboBox_category.currentText()
+                            asset_name = item.name
+                            item_label = asset_name
+
+                            asset_res = PipelineService.resolve_asset(
+                                asset_type=at_type,
+                                asset_name=asset_name,
+                                department=dept_name,
+                                project_name=proj_name,
+                            )
+                            versions = PipelineService.list_asset_versions(
+                                asset_type=at_type,
+                                asset_name=asset_name,
+                                department=dept_name,
+                                project_name=proj_name,
+                            )
+                            target_filepath = str(versions[-1][1]) if versions else str(asset_res.master_path)
+                            item_key = f"asset_{asset_name}_{dept_name}".lower().replace(" ", "_")
+
+                        if not target_filepath:
+                            batch_failed.append((item_label, "Could not resolve file path."))
+                            batch_logs.append(f"[-] {item_label}: Could not resolve file path.")
+                            continue
+
+                        # Execute pipeline feature with batch kwargs
+                        success, msg, target_path = PipelineService.execute_feature(
+                            feature_name=action,
+                            filepath=target_filepath,
                             department=dept_name,
-                            episode=ep,
-                            sequence=sq,
-                            shot=sh,
                             project_name=proj_name,
-                        )
-                        versions = PipelineService.list_versions(
-                            department=dept_name,
-                            episode=ep,
-                            sequence=sq,
-                            shot=sh,
-                            project_name=proj_name,
-                        )
-                        target_filepath = str(versions[-1][1]) if versions else str(shot_res.master_path)
-                        item_key = LockService.build_entity_key(
-                            department=dept_name,
-                            episode=ep,
-                            sequence=sq,
-                            shot=sh,
-                            project_name=proj_name,
+                            shot_data=shot_data_dict,
+                            **batch_kwargs,
                         )
 
-                        assets = list(item.assets) if item.assets else []
-                        if not assets and item.id:
-                            try:
-                                from zeroxe.services.shot_service import ShotService
+                        if success:
+                            batch_success.append((item_label, target_path or msg))
+                            batch_logs.append(f"[+] {item_label}: Success -> {target_path or msg}")
+                            if item_key and target_path:
+                                try:
+                                    if "generate" in action.lower():
+                                        ver_name = Path(target_path).stem.split("_")[-1] if target_path else "v001"
+                                        file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2) if Path(target_path).is_file() else 0.0
+                                        LockService.record_version(
+                                            entity_key=item_key,
+                                            version=ver_name,
+                                            file_path=str(target_path),
+                                            comment="Batch generation (v001)",
+                                            file_size_mb=file_size_mb,
+                                            project_name=proj_name,
+                                        )
+                                        try:
+                                            from versioning import VersioningSystem
+                                        except ImportError:
+                                            from pipeline.Commands.versioning import VersioningSystem
+                                        master_path = VersioningSystem.get_master_path(target_path)
+                                        m_size = round(Path(master_path).stat().st_size / (1024 * 1024), 2) if Path(master_path).is_file() else 0.0
+                                        LockService.record_version(
+                                            entity_key=item_key,
+                                            version="Master",
+                                            file_path=str(master_path),
+                                            comment="Batch generation (Up Master)",
+                                            file_size_mb=m_size,
+                                            project_name=proj_name,
+                                        )
+                                    else:
+                                        ver_name = "Master" if "master" in action.lower() else Path(target_path).stem.split("_")[-1]
+                                        file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2) if Path(target_path).is_file() else 0.0
+                                        LockService.record_version(
+                                            entity_key=item_key,
+                                            version=ver_name,
+                                            file_path=str(target_path),
+                                            comment=f"Batch execution: {action}",
+                                            file_size_mb=file_size_mb,
+                                            project_name=proj_name,
+                                        )
+                                except Exception as ex:
+                                    logger.warning(f"Could not record version history for {item_label}: {ex}")
+                        else:
+                            batch_failed.append((item_label, msg))
+                            batch_logs.append(f"[-] {item_label}: Failed -> {msg}")
 
-                                assets = ShotService.get_assets_for_shot(item.id)
-                            except Exception:
-                                pass
+                    except Exception as ex:
+                        batch_failed.append((getattr(item, "name", "Unknown"), str(ex)))
+                        batch_logs.append(f"[!] {item_label}: Exception -> {ex}")
 
-                        formatted_assets = []
-                        for a in assets:
-                            if isinstance(a, dict):
-                                formatted_assets.append(a)
-                            elif hasattr(a, "name"):
-                                formatted_assets.append({
-                                    "id": getattr(a, "id", ""),
-                                    "name": getattr(a, "name", ""),
-                                    "entity_type_id": getattr(a, "entity_type_id", getattr(a, "asset_type_id", "")),
-                                    "asset_type": getattr(a, "asset_type", ""),
-                                })
+                # Save consolidated batch log file
+                write_process_log(
+                    category="batch",
+                    process_name=f"batch_{action.lower()}",
+                    content="\n".join(batch_logs),
+                    extra_meta={
+                        "Action": action,
+                        "Department": dept_name,
+                        "Total Items": total,
+                        "Successful": len(batch_success),
+                        "Failed": len(batch_failed),
+                    },
+                )
+                return batch_success, batch_failed
 
-                        shot_data_dict = {
-                            "id": item.id,
-                            "name": item.name,
-                            "sequence": sq,
-                            "episode": ep,
-                            "assets": formatted_assets,
-                            "data": {
-                                "frame_in": item.frame_in,
-                                "frame_out": item.frame_out,
-                                "fps": item.fps,
-                                "resolution": item.resolution,
-                            },
-                        }
-
-                    elif isinstance(item, Asset):
-                        at_type = item.asset_type or self.view.ui.comboBox_category.currentText()
-                        asset_name = item.name
-                        item_label = asset_name
-
-                        asset_res = PipelineService.resolve_asset(
-                            asset_type=at_type,
-                            asset_name=asset_name,
-                            department=dept_name,
-                            project_name=proj_name,
-                        )
-                        versions = PipelineService.list_asset_versions(
-                            asset_type=at_type,
-                            asset_name=asset_name,
-                            department=dept_name,
-                            project_name=proj_name,
-                        )
-                        target_filepath = str(versions[-1][1]) if versions else str(asset_res.master_path)
-                        item_key = f"asset_{asset_name}_{dept_name}".lower().replace(" ", "_")
-
-                    if not target_filepath:
-                        failed_list.append((item_label, "Could not resolve file path."))
-                        continue
-
-                    # Execute pipeline feature with batch kwargs
-                    success, msg, target_path = PipelineService.execute_feature(
-                        feature_name=action,
-                        filepath=target_filepath,
-                        department=dept_name,
-                        project_name=proj_name,
-                        shot_data=shot_data_dict,
-                        **batch_kwargs,
-                    )
-
-                    if success:
-                        success_list.append((item_label, target_path or msg))
-                        # Record in history/audit log
-                        if item_key and target_path:
-                            try:
-                                if "generate" in action.lower():
-                                    ver_name = Path(target_path).stem.split("_")[-1] if target_path else "v001"
-                                    file_size_mb = 0.0
-                                    if Path(target_path).is_file():
-                                        file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2)
-
-                                    LockService.record_version(
-                                        entity_key=item_key,
-                                        version=ver_name,
-                                        file_path=str(target_path),
-                                        comment="Batch generation (v001)",
-                                        file_size_mb=file_size_mb,
-                                        project_name=proj_name,
-                                    )
-                                    try:
-                                        from versioning import VersioningSystem
-                                    except ImportError:
-                                        from pipeline.Commands.versioning import VersioningSystem
-
-                                    master_path = VersioningSystem.get_master_path(target_path)
-                                    m_size = round(Path(master_path).stat().st_size / (1024 * 1024), 2) if Path(master_path).is_file() else 0.0
-                                    LockService.record_version(
-                                        entity_key=item_key,
-                                        version="Master",
-                                        file_path=str(master_path),
-                                        comment="Batch generation (Up Master)",
-                                        file_size_mb=m_size,
-                                        project_name=proj_name,
-                                    )
-                                else:
-                                    ver_name = "Master" if "master" in action.lower() else Path(target_path).stem.split("_")[-1]
-                                    file_size_mb = 0.0
-                                    if Path(target_path).is_file():
-                                        file_size_mb = round(Path(target_path).stat().st_size / (1024 * 1024), 2)
-
-                                    LockService.record_version(
-                                        entity_key=item_key,
-                                        version=ver_name,
-                                        file_path=str(target_path),
-                                        comment=f"Batch execution: {action}",
-                                        file_size_mb=file_size_mb,
-                                        project_name=proj_name,
-                                    )
-                            except Exception as ex:
-                                logger.warning(f"Could not record version history for {item_label}: {ex}")
-                    else:
-                        failed_list.append((item_label, msg))
-
-                except Exception as ex:
-                    failed_list.append((getattr(item, "name", "Unknown"), str(ex)))
+            try:
+                success_list, failed_list = run_async_task(
+                    parent=self.view,
+                    title=f"Batch {action}",
+                    message=f"Executing batch '{action}' on {len(selected_items)} items...",
+                    task_func=_run_batch_job,
+                    total_steps=len(selected_items),
+                    can_cancel=True,
+                )
+            except Exception as e:
+                show_error_dialog(
+                    parent=self.view,
+                    title=f"Batch {action} Error",
+                    summary=f"An error occurred during batch execution: {e}",
+                    full_log=str(e),
+                    prefix=f"zeroxe_batch_{action.lower()}",
+                    category="batch",
+                )
+                return
 
             # Refresh view after batch
             self.refresh_versions()
@@ -1170,6 +1281,7 @@ class LauncherController(QObject):
                     summary=short_summary,
                     full_log=batch_full_log,
                     prefix=f"zeroxe_batch_{action.lower()}",
+                    category="batch",
                 )
             else:
                 summary = [
@@ -1181,7 +1293,7 @@ class LauncherController(QObject):
             return
 
         # ------------------------------------------------------------------
-        # B. Single Item Execution
+        # B. Single Item Execution (Runs on main thread so GUI dialogs render safely)
         # ------------------------------------------------------------------
         if not self.selected_file_path or self.current_version == "Pipeline Error":
             QMessageBox.warning(
@@ -1245,6 +1357,19 @@ class LauncherController(QObject):
                 department=dept_name,
                 project_name=proj_name,
                 shot_data=shot_data_dict,
+                parent=self.view,
+            )
+
+            # Record dedicated process log
+            write_process_log(
+                category="pipeline",
+                process_name=f"pipeline_{action.lower()}",
+                content=f"Success: {success}\nTarget Path: {target_path}\nOutput / Message:\n{msg}",
+                extra_meta={
+                    "Action": action,
+                    "Department": dept_name,
+                    "File": self.selected_file_path,
+                },
             )
 
             if success:
@@ -1309,14 +1434,18 @@ class LauncherController(QObject):
                     msg or f"Successfully executed '{action}'",
                 )
             else:
-                summary = extract_error_summary(action, msg)
-                show_error_dialog(
-                    parent=self.view,
-                    title=f"{action} Failed",
-                    summary=summary,
-                    full_log=msg or f"Failed to execute '{action}'",
-                    prefix=f"zeroxe_{action.lower()}_error",
-                )
+                if "cancelled" in (msg or "").lower():
+                    logger.info(f"{action} cancelled by user: {msg}")
+                else:
+                    summary = extract_error_summary(action, msg)
+                    show_error_dialog(
+                        parent=self.view,
+                        title=f"{action} Failed",
+                        summary=summary,
+                        full_log=msg or f"Failed to execute '{action}'",
+                        prefix=f"zeroxe_{action.lower()}_error",
+                        category="pipeline",
+                    )
 
         except Exception as e:
             logger.error(f"Error executing feature '{action}': {e}")
@@ -1329,6 +1458,7 @@ class LauncherController(QObject):
                 summary=summary,
                 full_log=tb,
                 prefix=f"zeroxe_{action.lower()}_error",
+                category="pipeline",
             )
 
     def on_open_path(self) -> None:
@@ -1407,6 +1537,7 @@ class LauncherController(QObject):
                     summary=f"Failed to create directory structure for '{target_file.name}'.",
                     full_log=str(e),
                     prefix="zeroxe_mkdir_error",
+                    category="dcc",
                 )
                 return
 
@@ -1426,13 +1557,31 @@ class LauncherController(QObject):
                 )
                 return
 
-        # 4. Launch Blender via QProcess and monitor for auto-unlock
+        # 4. Launch Blender via QProcess, stream logs to dedicated DCC process log, and monitor for auto-unlock
         try:
+            dcc_log_file = create_process_log_file("dcc", f"blender_{entity_key or 'launch'}")
+            append_process_log(
+                dcc_log_file,
+                f"=== Blender Launch Process Log ===\n"
+                f"Executable  : {active_blender}\n"
+                f"Target File : {target_file}\n"
+                f"Entity Key  : {entity_key}\n"
+                f"Project     : {proj_name}\n"
+                f"===================================\n\n"
+            )
+
             process = QProcess(self)
+            process.readyReadStandardOutput.connect(
+                lambda p=process, f=dcc_log_file: append_process_log(f, p.readAllStandardOutput().data().decode("utf-8", errors="replace"))
+            )
+            process.readyReadStandardError.connect(
+                lambda p=process, f=dcc_log_file: append_process_log(f, p.readAllStandardError().data().decode("utf-8", errors="replace"))
+            )
+
             if entity_key:
                 self._active_processes[entity_key] = process
                 process.finished.connect(
-                    lambda exit_code, exit_status, k=entity_key, p=proj_name: self._on_dcc_finished(k, p, exit_code)
+                    lambda exit_code, exit_status, k=entity_key, p=proj_name, f=dcc_log_file: self._on_dcc_finished(k, p, exit_code, f)
                 )
 
             process.start(active_blender, [str(target_file)])
@@ -1452,11 +1601,21 @@ class LauncherController(QObject):
                 summary="Failed to launch Blender executable.",
                 full_log=tb or str(e),
                 prefix="zeroxe_launch_error",
+                category="dcc",
             )
 
-    def _on_dcc_finished(self, entity_key: str, project_name: Optional[str], exit_code: int) -> None:
-        """Handle Blender process exit by automatically releasing lock."""
+    def _on_dcc_finished(
+        self,
+        entity_key: str,
+        project_name: Optional[str],
+        exit_code: int,
+        log_file: Optional[Path] = None,
+    ) -> None:
+        """Handle Blender process exit by logging completion and automatically releasing lock."""
         logger.info(f"DCC closed for '{entity_key}' (exit code: {exit_code}). Auto-releasing lock...")
+        if log_file:
+            append_process_log(log_file, f"\n=== DCC Exited with Code: {exit_code} ===\n")
+
         try:
             LockService.release_lock(entity_key, project_name=project_name)
         except Exception as e:

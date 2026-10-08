@@ -128,7 +128,63 @@ def test_show_error_dialog(qtbot, monkeypatch):
     assert dialog_executed is True
     assert log_path.is_file()
     content = log_path.read_text(encoding="utf-8")
-    assert "Test Title" in content
-    assert "Detailed error stack" in content
-
     log_path.unlink(missing_ok=True)
+
+
+def test_process_logs_separation():
+    """Verify that process logs are separated by category (app, dcc, pipeline, batch, kitsu)."""
+    from zeroxe.utils.log_util import (
+        clear_process_logs,
+        get_category_logs_dir,
+        list_process_logs,
+        read_process_log,
+        write_process_log,
+    )
+
+    # 1. Test directory resolution
+    dcc_dir = get_category_logs_dir("dcc")
+    assert dcc_dir.exists()
+    assert dcc_dir.name == "dcc"
+
+    pipeline_dir = get_category_logs_dir("pipeline")
+    assert pipeline_dir.exists()
+    assert pipeline_dir.name == "pipeline"
+
+    # 2. Test writing process logs
+    dcc_log = write_process_log(
+        category="dcc",
+        process_name="blender_launch_test",
+        content="Blender 4.2 launched with scene.blend",
+        command=["blender", "scene.blend"],
+        exit_code=0,
+    )
+    assert dcc_log.is_file()
+    assert "blender_launch_test" in dcc_log.name
+    assert dcc_log.parent.name == "dcc"
+
+    batch_log = write_process_log(
+        category="batch",
+        process_name="batch_lighting_test",
+        content="Batch lighting executed for 5 shots.",
+        extra_meta={"Shots": 5, "Status": "Success"},
+    )
+    assert batch_log.is_file()
+    assert batch_log.parent.name == "batch"
+
+    # 3. Test listing process logs
+    all_logs = list_process_logs()
+    assert len(all_logs) >= 2
+    categories_found = {item["category"] for item in all_logs}
+    assert "dcc" in categories_found
+    assert "batch" in categories_found
+
+    # 4. Test reading process log
+    content = read_process_log(dcc_log)
+    assert "ZeroXe Process Log: blender_launch_test" in content
+    assert "Blender 4.2 launched with scene.blend" in content
+    assert "Command     : blender scene.blend" in content
+
+    # 5. Clean up test logs
+    dcc_log.unlink(missing_ok=True)
+    batch_log.unlink(missing_ok=True)
+

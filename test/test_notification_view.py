@@ -84,12 +84,13 @@ class TestNotificationView(unittest.TestCase):
             self.assertEqual(called_item["title"], "Detail Item")
 
     def test_main_view_contains_notification_tab(self):
-        """Test that MainView includes the Notification tab."""
+        """Test that MainView includes Launcher, Notification, and Logs tabs."""
         with patch.object(NotificationService, "start_kitsu_listener"):
             main_view = MainView()
-            self.assertEqual(main_view.tab_widget.count(), 2)
+            self.assertEqual(main_view.tab_widget.count(), 3)
             self.assertEqual(main_view.tab_widget.tabText(0), "Launcher")
             self.assertEqual(main_view.tab_widget.tabText(1), "Notification")
+            self.assertEqual(main_view.tab_widget.tabText(2), "Logs")
             self.assertIsInstance(main_view.notification_view, NotificationView)
 
 

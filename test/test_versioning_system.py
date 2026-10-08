@@ -626,6 +626,35 @@ def test_live_builder_directory_discovery_if_available():
         assert builder_file.is_file()
 
 
+def test_lock_service_record_version(tmp_path, monkeypatch):
+    """Verify LockService.record_version updates version history cleanly."""
+    from zeroxe.services.lock_service import LockService
+
+    pipe_dir = tmp_path / "pipeline"
+    pipe_dir.mkdir(parents=True, exist_ok=True)
+    pipe_yaml = pipe_dir / "pipeline.yaml"
+    pipe_yaml.write_text("project:\n  name: TestProj\n")
+
+    monkeypatch.setattr(PipelineService, "get_active_pipeline_yaml_path", lambda project_name=None: pipe_yaml)
+    monkeypatch.setattr(PipelineService, "load_pipeline_module", lambda project_name=None: None)
+
+    res = LockService.record_version(
+        entity_key="ep01_sq01_sh0010_lay",
+        version="v001",
+        file_path=str(tmp_path / "ep01_sq01_sh0010_lay_v001.blend"),
+        comment="Test version record",
+        file_size_mb=12.5,
+        project_name="TestProj",
+    )
+    assert res is True
+
+    hist = LockService.get_history("ep01_sq01_sh0010_lay", project_name="TestProj")
+    assert len(hist.get("versions", [])) >= 1
+    assert hist["versions"][-1]["version"] == "v001"
+    assert hist["versions"][-1]["file_size_mb"] == 12.5
+
+
+
 
 
 

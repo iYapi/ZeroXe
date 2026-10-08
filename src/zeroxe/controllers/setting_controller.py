@@ -170,13 +170,27 @@ class SettingController(QObject):
             )
             return
 
-        login_btn = self.view.kitsu_ui.pushButton_login
-        login_btn.setEnabled(False)
-        login_btn.setText("Logging in...")
-        QApplication.processEvents()
+        from zeroxe.ui.loading_dialog import run_async_task
+        from zeroxe.utils.log_util import write_process_log
 
         try:
-            success, message = init_kitsu(url=url, email=email, password=password)
+            success, message = run_async_task(
+                parent=self.view,
+                title="Kitsu Login",
+                message=f"Connecting and authenticating with Kitsu ({url})...",
+                task_func=init_kitsu,
+                url=url,
+                email=email,
+                password=password,
+            )
+
+            write_process_log(
+                category="kitsu",
+                process_name="kitsu_auth",
+                content=f"Auth URL: {url}\nUser: {email}\nSuccess: {success}\nMessage: {message}",
+                exit_code=0 if success else 1,
+            )
+
             if success:
                 # Automatically persist settings upon successful login
                 self.save_settings()
@@ -194,10 +208,22 @@ class SettingController(QObject):
                     summary="Could not log in to Kitsu. Please check your credentials.",
                     full_log=str(message),
                     prefix="zeroxe_kitsu_error",
+                    category="kitsu",
                 )
-        finally:
-            login_btn.setEnabled(True)
-            login_btn.setText("LogIn")
+        except Exception as e:
+            write_process_log(
+                category="kitsu",
+                process_name="kitsu_auth_exception",
+                content=f"Auth error: {e}",
+            )
+            show_error_dialog(
+                parent=self.view,
+                title="Kitsu Login Error",
+                summary="An error occurred while connecting to Kitsu.",
+                full_log=str(e),
+                prefix="zeroxe_kitsu_error",
+                category="kitsu",
+            )
 
     def on_locate_blender(self) -> None:
         """Open file dialog to locate Blender executable."""

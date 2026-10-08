@@ -21,8 +21,10 @@ from zeroxe.api.update_api import UpdateAPI
 from zeroxe.services.notification_service import NotificationService
 from zeroxe.utils.icon_util import get_app_icon
 from zeroxe.views.launcher_view import LauncherView
+from zeroxe.views.logs_view import LogsView
 from zeroxe.views.notification_view import NotificationView
 from zeroxe.views.settings_view import SettingsView
+from zeroxe.utils.log_util import get_logs_base_dir, open_file_in_system
 
 
 class UpdateWorker(QThread):
@@ -89,9 +91,17 @@ class MainView(QMainWindow):
         self.tab_widget = QTabWidget(self)
         self.launcher_view = LauncherView(self)
         self.notification_view = NotificationView(self)
+        self.logs_view = LogsView(self)
         self.tab_widget.addTab(self.launcher_view, "Launcher")
         self.tab_widget.addTab(self.notification_view, "Notification")
+        self.tab_widget.addTab(self.logs_view, "Logs")
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
         self.setCentralWidget(self.tab_widget)
+
+    def _on_tab_changed(self, index: int):
+        # Auto-refresh log list when switching to Logs tab
+        if self.tab_widget.widget(index) == self.logs_view:
+            self.logs_view.refresh_log_list()
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
@@ -100,6 +110,14 @@ class MainView(QMainWindow):
         settings_action = QAction('&Settings', self)
         settings_action.triggered.connect(self.on_settings)
         edit_menu.addAction(settings_action)
+
+        logs_action = QAction('&Process Logs', self)
+        logs_action.triggered.connect(lambda: self.tab_widget.setCurrentWidget(self.logs_view))
+        edit_menu.addAction(logs_action)
+
+        open_logs_folder_action = QAction('&Open Logs Folder', self)
+        open_logs_folder_action.triggered.connect(lambda: open_file_in_system(get_logs_base_dir()))
+        edit_menu.addAction(open_logs_folder_action)
 
         help_menu = menubar.addMenu('&Help')
         check_update_action = QAction('&Check for update', self)
