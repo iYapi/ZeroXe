@@ -5,16 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/zeroxe/views/notification_view.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/test_notification_view.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ui/logs.ui" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ui/notification.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/NOTIFICATION_SYSTEM_GUIDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/NOTIFICATION_SYSTEM_GUIDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/notification_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/notification_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/main_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/main_view.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/test_notification_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_notification_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/compositing_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/compositing_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_dialog.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_dialog.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/pipeline_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/pipeline_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/shot_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/shot_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/test_lighting_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_lighting_builder.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -212,7 +213,7 @@
       <workItem from="1790925689157" duration="5599000" />
       <workItem from="1791168204151" duration="5110000" />
       <workItem from="1791340006306" duration="5627000" />
-      <workItem from="1791427538120" duration="5801000" />
+      <workItem from="1791427538120" duration="11386000" />
     </task>
     <servers />
   </component>
@@ -220,7 +221,7 @@
     <option name="version" value="3" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1791434847521" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
+    <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1791446252039" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
     <SUITE FILE_PATH="coverage/ZeroXe$main_view.coverage" NAME="main_view Coverage Results" MODIFIED="1788508837608" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe/views" />
     <SUITE FILE_PATH="coverage/ZeroXe$.coverage" NAME=" Coverage Results" MODIFIED="1790913326088" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/ZeroXe$build_executable.coverage" NAME="build_executable Coverage Results" MODIFIED="1788510426871" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scripts" />

@@ -883,4 +883,38 @@ class PipelineService:
         # If feature was executed completely within pipeline
         return is_success, msg or f"Successfully executed '{feature_name}'", target_path
 
+    @classmethod
+    def prompt_batch_parameters(
+        cls,
+        department: str,
+        action: str,
+        selected_items: List[Any],
+        parent: Optional[Any] = None,
+        project_name: Optional[str] = None,
+        available_shots: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Prompt for department-specific batch parameters (e.g. FG YAML, Comp Mastershot) or confirmation.
+
+        Returns:
+            Dict[str, Any] of extra kwargs to pass to execute_feature, or None if the user cancelled.
+        """
+        config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+        try:
+            from pipeline.Commands.Builders.builder_factory import BuilderFactory
+            return BuilderFactory.prompt_batch_parameters(
+                department=department,
+                action=action,
+                selected_items=selected_items,
+                parent=parent,
+                project_name=project_name,
+                config_path=config_path,
+                available_shots=available_shots,
+                **kwargs,
+            )
+        except Exception as e:
+            logger.warning(f"Error in prompt_batch_parameters: {e}")
+            return {}
+
+
 

@@ -124,6 +124,48 @@ class ShotService:
             return []
 
     @classmethod
+    def get_shots_by_sequence(
+        cls,
+        sequence_id: Optional[str] = None,
+        episode_id: Optional[str] = None,
+        episode: Optional[str] = None,
+        sequence: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> List[Shot]:
+        """Fetch all shots for a sequence or episode from Kitsu."""
+        if not is_kitsu_connected():
+            return []
+
+        # 1. Direct sequence_id
+        if sequence_id:
+            try:
+                raw_shots = gazu.shot.all_shots_for_sequence(sequence_id) or []
+                return [Shot.from_kitsu(s) for s in raw_shots if isinstance(s, dict)]
+            except Exception as e:
+                logger.error(f"Failed to fetch shots for sequence {sequence_id}: {e}")
+
+        # 2. Episode ID
+        if episode_id:
+            all_ep_shots = cls.get_shots_by_episode_id(episode_id, episode_name=episode or "")
+            if sequence:
+                seq_clean = sequence.strip().lower()
+                return [s for s in all_ep_shots if s.sequence and s.sequence.lower() == seq_clean]
+            return all_ep_shots
+
+        # 3. Search via episode name
+        if episode and project_id:
+            episodes = cls.get_episodes_by_project_id(project_id)
+            target_ep = next((e for e in episodes if e.name.lower() == episode.lower() or e.id == episode), None)
+            if target_ep:
+                all_ep_shots = cls.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
+                if sequence:
+                    seq_clean = sequence.strip().lower()
+                    return [s for s in all_ep_shots if s.sequence and s.sequence.lower() == seq_clean]
+                return all_ep_shots
+
+        return []
+
+    @classmethod
     def get_assets_for_shot(cls, shot_id: str) -> List[dict]:
         """Fetch assets linked to a specific shot on-demand when inspected."""
         if not is_kitsu_connected() or not shot_id:

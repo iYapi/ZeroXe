@@ -1,17 +1,24 @@
+import json
+import logging
 import os
 import sys
-import json
 from pathlib import Path
-from textwrap import dedent
 from string import Template
+from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
 
+logger = logging.getLogger(__name__)
 
-def _get_lighting_dialog_class():
-    """Dynamically resolve and import LightingAssetDialog under any execution environment."""
+
+def _get_lighting_dialog_classes():
+    """Dynamically resolve and import LightingAssetDialog and LightingBatchDialog."""
+    if "pipeline.Commands.Builders.lighting_dialog" in sys.modules:
+        mod = sys.modules["pipeline.Commands.Builders.lighting_dialog"]
+        return getattr(mod, "LightingAssetDialog", None), getattr(mod, "LightingBatchDialog", None)
+
     try:
-        from .lighting_dialog import LightingAssetDialog
-        return LightingAssetDialog
+        from .lighting_dialog import LightingAssetDialog, LightingBatchDialog
+        return LightingAssetDialog, LightingBatchDialog
     except Exception:
         pass
 
@@ -22,9 +29,9 @@ def _get_lighting_dialog_class():
         "lighting_dialog",
     ]:
         try:
-            mod = __import__(mod_name, fromlist=["LightingAssetDialog"])
+            mod = __import__(mod_name, fromlist=["LightingAssetDialog", "LightingBatchDialog"])
             if hasattr(mod, "LightingAssetDialog"):
-                return getattr(mod, "LightingAssetDialog")
+                return getattr(mod, "LightingAssetDialog"), getattr(mod, "LightingBatchDialog", None)
         except Exception:
             pass
 
@@ -36,11 +43,11 @@ def _get_lighting_dialog_class():
             if spec and spec.loader:
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                return getattr(mod, "LightingAssetDialog", None)
+                return getattr(mod, "LightingAssetDialog", None), getattr(mod, "LightingBatchDialog", None)
     except Exception:
         pass
 
-    return None
+    return None, None
 
 
 class LightingBuilder:
@@ -242,7 +249,7 @@ class LightingBuilder:
         is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
         if selected_fg is None and show_ui and not is_test_env:
-            dialog_cls = _get_lighting_dialog_class()
+            dialog_cls, _ = _get_lighting_dialog_classes()
             if dialog_cls is not None:
                 try:
                     from PySide6.QtWidgets import QApplication
@@ -266,16 +273,9 @@ class LightingBuilder:
                         f"Could not display LightingAssetDialog: {e}"
                     )
 
-        # 4. Headless fallback: all non-set and non-mastershot assets in shot_data are considered FG
+        # 4. Headless fallback: by default all assets are placed in BG (fg_assets = [])
         if selected_fg is None:
-            selected_fg = [
-                a.get("name")
-                for a in shot_assets_content
-                if isinstance(a, dict)
-                and a.get("name")
-                and not a.get("name", "").startswith("s-")
-                and not a.get("name", "").startswith("ms_")
-            ]
+            selected_fg = []
 
         lighting_script = self.script_builder(
             filepath=filepath["final"],
@@ -557,6 +557,31 @@ class LightingBuilder:
                         return cand
 
         return None
+
+    @classmethod
+    def prompt_batch_dialog(
+        cls,
+        selected_items: List[Any],
+        parent: Optional[Any] = None,
+        available_shots: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Open batch dialog to configure FG mapping for multiple shots."""
+        try:
+            from PySide6.QtWidgets import QApplication
+            if QApplication.instance() is None:
+                return {}
+
+            _, batch_dialog_cls = _get_lighting_dialog_classes()
+            if batch_dialog_cls is not None:
+                from PySide6.QtWidgets import QDialog
+                dlg = batch_dialog_cls(selected_items=selected_items, available_shots=available_shots, parent=parent)
+                if dlg.exec() == QDialog.DialogCode.Accepted:
+                    return dlg.get_result()
+                return None  # User clicked Cancel
+        except Exception as e:
+            logger.warning(f"Error in prompt_batch_dialog: {e}")
+        return {}
 
     def script_builder(
         self,

@@ -862,3 +862,70 @@ class BuilderFactory:
                 target_final_path=final_path,
             )
 
+    @classmethod
+    def prompt_batch_parameters(
+        cls,
+        department: str,
+        action: str,
+        selected_items: List[Any],
+        parent: Optional[Any] = None,
+        project_name: Optional[str] = None,
+        config_path: Optional[Union[str, Path]] = None,
+        available_shots: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Interactively prompt for department-specific batch parameters (e.g. FG YAML, Comp Mastershot) or confirmation.
+
+        Returns:
+            Dict[str, Any] of extra kwargs to pass to execute_feature, or None if the user cancelled.
+        """
+        dept_clean = (department or "").lower().strip()
+        action_clean = (action or "").lower().strip()
+
+        # 1. Resolve builder for the department
+        try:
+            departments = {}
+            if config_path and Path(config_path).is_file():
+                with open(config_path, "r", encoding="utf-8") as f:
+                    departments = (yaml.safe_load(f) or {}).get("departments", {})
+            dept_info = departments.get(department) or {}
+            builder = cls._get_builtin_builder(department=department, dept_cfg=dept_info)
+        except Exception:
+            builder = cls._get_builtin_builder(department=department)
+
+        # 2. Check if builder implements custom prompt_batch_dialog
+        if builder is not None and hasattr(builder, "prompt_batch_dialog") and callable(getattr(builder, "prompt_batch_dialog")):
+            if "generate" in action_clean:
+                try:
+                    res = builder.prompt_batch_dialog(
+                        selected_items=selected_items,
+                        parent=parent,
+                        available_shots=available_shots,
+                        **kwargs,
+                    )
+                    return res  # None if cancelled, dict if confirmed
+                except Exception as e:
+                    logger.warning(f"Error calling builder prompt_batch_dialog: {e}")
+
+        # 3. Standard Confirmation Question Dialog Fallback
+        try:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+
+            if QApplication.instance() is not None:
+                p = parent or QApplication.activeWindow()
+                reply = QMessageBox.question(
+                    p,
+                    f"Confirm Batch {action}",
+                    f"You have selected {len(selected_items)} items.\n\n"
+                    f"Do you want to execute '{action}' on all {len(selected_items)} items in batch?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return None  # Cancelled
+        except Exception:
+            pass
+
+        return {}
+
+

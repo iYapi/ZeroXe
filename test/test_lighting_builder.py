@@ -63,11 +63,16 @@ def test_lighting_dialog_categorization(qapp):
     assert "s-forest" not in categories["Props"]
     assert "ms_lit_day" not in categories["Characters"]
 
-    # Test get_selected_fg_assets
-    all_selected = dialog.get_selected_fg_assets()
-    assert "c-hero" in all_selected
-    assert "c-villain" in all_selected
-    assert "p-sword" in all_selected
+    # Test get_selected_fg_assets (default is all in BG, so [] initially)
+    default_selected = dialog.get_selected_fg_assets()
+    assert default_selected == []
+
+    # Select c-hero and c-villain
+    dialog._checkbox_map["c-hero"].setChecked(True)
+    dialog._checkbox_map["c-villain"].setChecked(True)
+    updated_selected = dialog.get_selected_fg_assets()
+    assert "c-hero" in updated_selected
+    assert "c-villain" in updated_selected
 
     # Uncheck c-villain
     dialog._checkbox_map["c-villain"].setChecked(False)
@@ -137,6 +142,7 @@ def test_lighting_builder_extract_data_headless(tmp_path):
         "source": str(tmp_path / "SQ01_SH001_anm.blend"),
     }
 
+    # Headless without explicit fg_assets defaults to [] (all in BG)
     script = builder.extract_data(
         shot_data=mock_shot_data,
         current_department=mock_current_dept,
@@ -144,11 +150,10 @@ def test_lighting_builder_extract_data_headless(tmp_path):
         mastershots_data={},
         addons_data={},
         filepath=filepath_dict,
-        fg_assets=["c-hero"],
         show_ui=False,
     )
 
-    assert "fg_assets = ['c-hero']" in script
+    assert "fg_assets = []" in script
     assert "ensure_collection(\"fg\")" in script
     assert "ensure_collection(\"bg\")" in script
 
@@ -183,9 +188,9 @@ def test_lighting_builder_extract_data_with_dialog(monkeypatch, tmp_path, qapp):
     # Temporarily bypass PYTEST_CURRENT_TEST to test dialog execution path
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
 
-    # 1. Test Dialog Accepted
+    # 1. Test Dialog Accepted with c-hero checked
     def mock_exec_accepted(self):
-        self._checkbox_map["c-villain"].setChecked(False)
+        self._checkbox_map["c-hero"].setChecked(True)
         return 1
 
     monkeypatch.setattr(LightingAssetDialog, "exec", mock_exec_accepted)
@@ -403,6 +408,32 @@ def test_lighting_builder_fg_auto_discovery(tmp_path):
     )
 
     assert "fg_assets = ['c-hero']" in script
+
+
+def test_prompt_batch_parameters_lighting():
+    """Verify that PipelineService.prompt_batch_parameters properly triggers LightingBatchDialog."""
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QDialog
+    from zeroxe.services.pipeline_service import PipelineService
+    from pipeline.Commands.Builders.lighting_dialog import LightingBatchDialog
+
+    selected_items = [{"name": "sh010", "sequence": "sq01"}, {"name": "sh020", "sequence": "sq01"}]
+
+    with patch.object(
+        LightingBatchDialog, "exec", return_value=QDialog.DialogCode.Accepted
+    ), patch.object(
+        LightingBatchDialog,
+        "get_result",
+        return_value={"fg_yaml": "/projects/mdt/batch_fg.yaml"},
+    ):
+        params = PipelineService.prompt_batch_parameters(
+            department="Lighting",
+            action="Generate",
+            selected_items=selected_items,
+            available_shots=["sq01_sh010", "sq01_sh020"],
+        )
+        assert params == {"fg_yaml": "/projects/mdt/batch_fg.yaml"}
+
 
 
 
