@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from textwrap import dedent
 from string import Template
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 def _get_lighting_dialog_class():
@@ -55,6 +55,7 @@ class LightingBuilder:
         addons_data: Dict[str, Any],
         filepath: Dict[str, str],
         fg_assets: Optional[List[str]] = None,
+        fg_yaml: Optional[Union[str, Path, dict, list]] = None,
         show_ui: bool = True,
         **kwargs: Any,
     ) -> str:
@@ -192,12 +193,51 @@ class LightingBuilder:
         }
 
         # ------------------------------------------------------------------
-        # Foreground (FG) Asset Selection (Popup UI / Configuration)
+        # Foreground (FG) Asset Selection (YAML Configuration / UI / Headless)
         # ------------------------------------------------------------------
         selected_fg = fg_assets
+
+        # 1. Resolve FG assets from YAML configuration (explicit or auto-discovered)
+        yaml_source = (
+            fg_yaml
+            or kwargs.get("fg_yaml")
+            or kwargs.get("fg_yaml_path")
+            or kwargs.get("fg_config")
+            or kwargs.get("fg_config_path")
+            or (kwargs.get("setting_data") and (
+                kwargs["setting_data"].get("fg_yaml")
+                or kwargs["setting_data"].get("fg_yaml_path")
+                or kwargs["setting_data"].get("fg_config")
+                or kwargs["setting_data"].get("fg_config_path")
+            ))
+            or shot_data.get("fg_yaml")
+            or shot_data.get("fg_config")
+        )
+
+        if not yaml_source:
+            yaml_source = self._discover_fg_yaml(filepath, shot_data)
+
+        if selected_fg is None and yaml_source:
+            fg_cfg = self.load_fg_config_from_yaml(yaml_source)
+            if fg_cfg is not None:
+                available_shot_assets = [
+                    a.get("name")
+                    for a in shot_assets_content
+                    if isinstance(a, dict) and a.get("name")
+                ]
+                resolved_from_yaml = self.resolve_fg_assets_from_config(
+                    config_data=fg_cfg,
+                    shot_data=shot_data,
+                    available_assets=available_shot_assets,
+                )
+                if resolved_from_yaml is not None:
+                    selected_fg = resolved_from_yaml
+
+        # 2. Check setting_data["fg_assets"] list
         if selected_fg is None and kwargs.get("setting_data") and "fg_assets" in kwargs["setting_data"]:
             selected_fg = kwargs["setting_data"]["fg_assets"]
 
+        # 3. Interactive UI dialog (for single interactive execution when not in batch/test)
         import os
         is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
@@ -226,8 +266,8 @@ class LightingBuilder:
                         f"Could not display LightingAssetDialog: {e}"
                     )
 
+        # 4. Headless fallback: all non-set and non-mastershot assets in shot_data are considered FG
         if selected_fg is None:
-            # Headless default: all non-set assets in shot_data are considered FG
             selected_fg = [
                 a.get("name")
                 for a in shot_assets_content
@@ -248,6 +288,275 @@ class LightingBuilder:
             fg_assets=selected_fg,
         )
         return lighting_script
+
+    @classmethod
+    def load_fg_config_from_yaml(
+        cls,
+        yaml_source: Any,
+    ) -> Optional[Any]:
+        """Load and parse FG assets mapping from a YAML file, string, or dictionary.
+
+        Args:
+            yaml_source: Path to YAML file, YAML content string, or already parsed dict/list.
+
+        Returns:
+            Parsed YAML data (dict or list), or None if invalid.
+        """
+        if yaml_source is None:
+            return None
+
+        if isinstance(yaml_source, (dict, list)):
+            return yaml_source
+
+        from textwrap import dedent
+        import yaml
+
+        source_raw = str(yaml_source)
+        source_str = dedent(source_raw).strip()
+        if not source_str:
+            return None
+
+        # 1. If single line without newlines, check if it is a file path on disk
+        if "\n" not in source_str:
+            try:
+                source_path = Path(source_str)
+                if source_path.is_file():
+                    with open(source_path, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f)
+            except Exception as e:
+                import logging
+                logging.getLogger("ZeroXe.LightingBuilder").warning(
+                    f"Failed to read FG YAML file '{source_str}': {e}"
+                )
+                return None
+
+        # 2. Parse as raw YAML string
+        try:
+            parsed = yaml.safe_load(source_str)
+            if isinstance(parsed, (dict, list)):
+                return parsed
+        except Exception:
+            pass
+
+        return None
+
+    @classmethod
+    def resolve_fg_assets_from_config(
+        cls,
+        config_data: Any,
+        shot_data: Dict[str, Any],
+        available_assets: Optional[List[str]] = None,
+    ) -> Optional[List[str]]:
+        """Resolve list of FG asset names for a given shot from parsed YAML configuration.
+
+        Supported YAML Schemas:
+        1. Flat list of assets (global FG across all shots):
+           - chr_hero
+           - prp_sword
+
+        2. Global FG dictionary:
+           fg_assets:
+             - chr_hero
+             - prp_sword
+
+        3. Per-shot dictionary (keys can be 'sq01_sh010', 'sh010', or 'ep01_sq01_sh010'):
+           sq01_sh010:
+             - chr_hero
+           sh020:
+             fg_assets: [chr_villain]
+             bg_assets: [prp_extra]
+
+        4. Nested under 'shots' or 'scenes' or 'lighting':
+           shots:
+             sq01_sh010:
+               - chr_hero
+
+        5. Per-sequence dictionary (fallback if shot not individually defined):
+           sequences:
+             sq01: [chr_hero]
+
+        6. Wildcard glob matching (e.g. 'chr_*', 'prp_hero*') against available_assets.
+
+        Args:
+            config_data: The parsed YAML data (dict or list).
+            shot_data: Shot metadata dictionary containing 'name', 'sequence', 'episode'.
+            available_assets: Optional list of all asset names present in the shot.
+
+        Returns:
+            List of matching FG asset names, or None if no rule matched.
+        """
+        if not config_data and config_data != []:
+            return None
+
+        # A. Top-level flat list: applies globally to all shots
+        if isinstance(config_data, list):
+            raw_list = [str(item).strip() for item in config_data if item]
+            return cls._match_asset_patterns(raw_list, available_assets)
+
+        if not isinstance(config_data, dict):
+            return None
+
+        shot_name = str(shot_data.get("name") or "").strip()
+        sequence_name = str(shot_data.get("sequence") or "").strip()
+        episode_name = str(shot_data.get("episode") or "").strip()
+
+        # Build candidate lookup keys in priority order
+        candidates = []
+        if episode_name and sequence_name and shot_name:
+            candidates.append(f"{episode_name}_{sequence_name}_{shot_name}".lower())
+        if sequence_name and shot_name:
+            candidates.append(f"{sequence_name}_{shot_name}".lower())
+        if shot_name:
+            candidates.append(shot_name.lower())
+
+        # Helper to search a dict case-insensitively
+        def _find_in_dict(d: dict, keys: List[str]) -> Optional[Any]:
+            if not isinstance(d, dict):
+                return None
+            lower_map = {str(k).lower().strip(): v for k, v in d.items()}
+            for k in keys:
+                if k in lower_map:
+                    return lower_map[k]
+            return None
+
+        # 1. Search in top-level dict by shot candidate keys
+        matched_section = _find_in_dict(config_data, candidates)
+
+        # 2. Search under 'shots', 'scenes', 'lighting', 'shot_list'
+        if matched_section is None:
+            for container_key in ["shots", "scenes", "lighting", "shot_list"]:
+                sub_dict = config_data.get(container_key)
+                if isinstance(sub_dict, dict):
+                    matched_section = _find_in_dict(sub_dict, candidates)
+                    if matched_section is not None:
+                        break
+
+        # 3. Search sequence-level fallback under 'sequences' or top-level
+        if matched_section is None and sequence_name:
+            seq_candidates = [sequence_name.lower()]
+            if episode_name:
+                seq_candidates.insert(0, f"{episode_name}_{sequence_name}".lower())
+
+            sub_seqs = config_data.get("sequences") or config_data.get("sequence_list")
+            if isinstance(sub_seqs, dict):
+                matched_section = _find_in_dict(sub_seqs, seq_candidates)
+            if matched_section is None:
+                matched_section = _find_in_dict(config_data, seq_candidates)
+
+        # 4. Search global fallback keys
+        if matched_section is None:
+            for g_key in ["fg_assets", "foreground_assets", "foreground", "fg", "default_fg"]:
+                if g_key in config_data:
+                    matched_section = config_data[g_key]
+                    break
+
+        if matched_section is None:
+            return None
+
+        # Extract FG patterns and BG exclusions from matched section
+        fg_patterns: List[str] = []
+        bg_patterns: List[str] = []
+
+        if isinstance(matched_section, list):
+            fg_patterns = [str(x).strip() for x in matched_section if x]
+        elif isinstance(matched_section, dict):
+            for k in ["fg_assets", "foreground_assets", "foreground", "fg", "assets"]:
+                if k in matched_section and isinstance(matched_section[k], list):
+                    fg_patterns = [str(x).strip() for x in matched_section[k] if x]
+                    break
+            for bk in ["bg_assets", "background_assets", "background", "bg", "exclude"]:
+                if bk in matched_section and isinstance(matched_section[bk], list):
+                    bg_patterns = [str(x).strip() for x in matched_section[bk] if x]
+                    break
+        elif isinstance(matched_section, str):
+            fg_patterns = [matched_section.strip()]
+
+        # Resolve patterns against available assets
+        resolved_fg = cls._match_asset_patterns(fg_patterns, available_assets)
+
+        # Apply exclusions if BG patterns specified
+        if bg_patterns:
+            excluded = set(cls._match_asset_patterns(bg_patterns, available_assets or resolved_fg))
+            resolved_fg = [a for a in resolved_fg if a not in excluded]
+
+        return resolved_fg
+
+    @classmethod
+    def _match_asset_patterns(
+        cls,
+        patterns: List[str],
+        available_assets: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Expand wildcard patterns or return exact names matching available shot assets."""
+        import fnmatch
+
+        if not patterns:
+            return []
+
+        matched = []
+        for asset in available_assets:
+            if not asset:
+                continue
+            asset_clean = str(asset).strip()
+            asset_lower = asset_clean.lower()
+            for pat in patterns:
+                pat_clean = str(pat).strip()
+                pat_lower = pat_clean.lower()
+                if not pat_lower:
+                    continue
+                if pat_lower == asset_lower or fnmatch.fnmatch(asset_lower, pat_lower) or pat_lower in asset_lower:
+                    if asset_clean not in matched:
+                        matched.append(asset_clean)
+                    break
+
+        # Also preserve explicit non-wildcard patterns so direct Animation .blend collection names match
+        for pat in patterns:
+            pat_clean = str(pat).strip()
+            if pat_clean and "*" not in pat_clean and "?" not in pat_clean:
+                if pat_clean not in matched and pat_clean.lower() not in [m.lower() for m in matched]:
+                    matched.append(pat_clean)
+
+        return matched
+
+    @classmethod
+    def _discover_fg_yaml(
+        cls,
+        filepath: Dict[str, str],
+        shot_data: Dict[str, Any],
+    ) -> Optional[Path]:
+        """Auto-detect if an FG configuration YAML file exists in shot or sequence folders."""
+        candidate_names = [
+            "fg_assets.yaml",
+            "fg_assets.yml",
+            "lighting_fg.yaml",
+            "lighting_fg.yml",
+            "batch_fg.yaml",
+            "batch_fg.yml",
+            "fg_map.yaml",
+            "fg_map.yml",
+            "fg.yaml",
+            "fg.yml",
+        ]
+
+        search_dirs: List[Path] = []
+
+        # 1. Directory of target version or final file
+        for k in ["version", "final", "source"]:
+            p_str = filepath.get(k)
+            if p_str:
+                p = Path(p_str)
+                search_dirs.append(p.parent)
+                search_dirs.append(p.parent.parent)
+
+        # 2. Check candidate filenames in search directories
+        for d in search_dirs:
+            if d.is_dir():
+                for cname in candidate_names:
+                    cand = d / cname
+                    if cand.is_file():
+                        return cand
+
+        return None
 
     def script_builder(
         self,
@@ -602,12 +911,26 @@ bpy.ops.wm.quit_blender()
 
 if __name__ == "__main__":
     try:
-        shot_info = json.loads(sys.argv[1])
-        current_dept = json.loads(sys.argv[2])
-        asset_dept = json.loads(sys.argv[3])
-        mastershot_data = json.loads(sys.argv[4])
-        addon_data = json.loads(sys.argv[5])
-        file_paths = json.loads(sys.argv[-1])
+        fg_yaml_arg = None
+        filtered_args = []
+        i = 1
+        while i < len(sys.argv):
+            if sys.argv[i] == "--fg-yaml" and i + 1 < len(sys.argv):
+                fg_yaml_arg = sys.argv[i + 1]
+                i += 2
+            elif sys.argv[i].startswith("--fg-yaml="):
+                fg_yaml_arg = sys.argv[i].split("=", 1)[1]
+                i += 1
+            else:
+                filtered_args.append(sys.argv[i])
+                i += 1
+
+        shot_info = json.loads(filtered_args[0])
+        current_dept = json.loads(filtered_args[1])
+        asset_dept = json.loads(filtered_args[2])
+        mastershot_data = json.loads(filtered_args[3])
+        addon_data = json.loads(filtered_args[4])
+        file_paths = json.loads(filtered_args[-1])
 
         builder = LightingBuilder()
         result = builder.extract_data(
@@ -617,6 +940,7 @@ if __name__ == "__main__":
             mastershots_data=mastershot_data,
             addons_data=addon_data,
             filepath=file_paths,
+            fg_yaml=fg_yaml_arg,
             show_ui=False,
         )
         print(result)

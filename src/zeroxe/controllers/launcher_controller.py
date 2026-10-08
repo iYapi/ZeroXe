@@ -954,16 +954,53 @@ class LauncherController(QObject):
         # A. Batch Execution (Multiple items selected)
         # ------------------------------------------------------------------
         if is_multi and len(selected_items) > 1:
-            reply = QMessageBox.question(
-                self.view,
-                f"Confirm Batch {action}",
-                f"You have selected {len(selected_items)} items.\n\n"
-                f"Do you want to execute '{action}' on all {len(selected_items)} items in batch?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
+            fg_yaml_path = None
+            is_lighting_generate = (
+                ("light" in dept_name.lower() or dept_name.lower() == "lgt")
+                and "generate" in action.lower()
             )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+
+            if is_lighting_generate:
+                from PySide6.QtWidgets import QFileDialog
+
+                msg_box = QMessageBox(self.view)
+                msg_box.setWindowTitle(f"Confirm Batch {action}")
+                msg_box.setText(
+                    f"You have selected {len(selected_items)} shots for Batch Lighting Generation.\n\n"
+                    "Do you want to provide a YAML configuration file for Foreground (FG) asset mapping, "
+                    "or proceed with the default setup (all non-set assets in FG)?"
+                )
+                btn_yaml = msg_box.addButton("Select YAML File...", QMessageBox.ButtonRole.ActionRole)
+                btn_default = msg_box.addButton("Use Default (All in FG)", QMessageBox.ButtonRole.AcceptRole)
+                btn_cancel = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+                msg_box.setDefaultButton(btn_default)
+
+                msg_box.exec()
+                clicked_btn = msg_box.clickedButton()
+
+                if clicked_btn == btn_cancel:
+                    return
+                elif clicked_btn == btn_yaml:
+                    chosen_yaml, _ = QFileDialog.getOpenFileName(
+                        self.view,
+                        "Select Lighting FG Assets YAML",
+                        "",
+                        "YAML Files (*.yaml *.yml);;All Files (*)",
+                    )
+                    if not chosen_yaml:
+                        return
+                    fg_yaml_path = chosen_yaml
+            else:
+                reply = QMessageBox.question(
+                    self.view,
+                    f"Confirm Batch {action}",
+                    f"You have selected {len(selected_items)} items.\n\n"
+                    f"Do you want to execute '{action}' on all {len(selected_items)} items in batch?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
 
             success_list = []
             failed_list = []
@@ -1064,12 +1101,17 @@ class LauncherController(QObject):
                         continue
 
                     # Execute pipeline feature
+                    feature_kwargs = {}
+                    if fg_yaml_path:
+                        feature_kwargs["fg_yaml"] = fg_yaml_path
+
                     success, msg, target_path = PipelineService.execute_feature(
                         feature_name=action,
                         filepath=target_filepath,
                         department=dept_name,
                         project_name=proj_name,
                         shot_data=shot_data_dict,
+                        **feature_kwargs,
                     )
 
                     if success:

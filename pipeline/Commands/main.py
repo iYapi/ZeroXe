@@ -652,6 +652,7 @@ def main() -> None:
     gen_parser.add_argument("--dept", "-d", default="Layout", help="Department name (e.g. Layout, Animation)")
     gen_parser.add_argument("--mode", "-m", default="previous", help="Builder resolution mode (e.g. previous, scan)")
     gen_parser.add_argument("--shot-data", default="{}", help="JSON string of shot data / metadata")
+    gen_parser.add_argument("--fg-yaml", default="", help="Path to YAML file or mapping defining FG assets for Lighting")
     gen_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # list-features command
@@ -665,6 +666,7 @@ def main() -> None:
     exec_feat_parser.add_argument("--file", "-f", required=True, help="Input DCC file path")
     exec_feat_parser.add_argument("--dept", "-d", default="", help="Department name")
     exec_feat_parser.add_argument("--preset", "-p", default="", help="Path to preset python script")
+    exec_feat_parser.add_argument("--fg-yaml", default="", help="Path to YAML file or mapping defining FG assets for Lighting")
     exec_feat_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # up-version command
@@ -722,6 +724,7 @@ def main() -> None:
             shot_data=shot_data,
             config_path=args.config,
             builder_mode=getattr(args, "mode", "previous"),
+            fg_yaml=getattr(args, "fg_yaml", None) or None,
         )
         if args.json:
             print(json.dumps({"version_path": ver_path, "script": script}, indent=2))

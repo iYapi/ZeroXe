@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Application Metadata
 APP_NAME = "Zeroxe"
-APP_VERSION = "1.0.0"
+APP_VERSION = "26.10.08"
 ORGANIZATION_NAME = "ZeroxeOrg"
 ORGANIZATION_DOMAIN = "zeroxe.org"
 MAINTAINER = "iYapi"
