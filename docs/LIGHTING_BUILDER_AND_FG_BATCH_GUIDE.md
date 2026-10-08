@@ -23,7 +23,7 @@ flowchart TD
     FGSource{"FG Selection Source"}
     FGSource -->|Single UI| Dialog["LightingAssetDialog (Interactive Checklist)"]
     FGSource -->|Batch Generate| Yaml["YAML Config File (batch_fg.yaml)"]
-    FGSource -->|Headless Default| DefaultRule["All Non-Set Assets -> FG"]
+    FGSource -->|Headless Default| DefaultRule["Default -> All in BG"]
     
     Dialog --> LB
     Yaml --> LB
@@ -62,15 +62,15 @@ Scene Collection
 ### A. Single Shot Generation (Interactive UI)
 When generating a single shot in the Launcher UI:
 1. Click **`Generate`** on a selected shot in the **Lighting** department.
-2. The **`LightingAssetDialog`** modal opens with categorized asset tabs (**Characters**, **Props**, **Vehicles**).
-3. Check the assets that should be in the **Foreground (FG)**; uncheck background assets.
-4. Click **`Build Lighting Scene`**.
+2. The **`LightingAssetDialog`** modal opens with categorized asset tabs (**Characters**, **Props**, **Vehicles**). All assets are unchecked (in **BG**) by default.
+3. Check the assets that should be in the **Foreground (FG)**.
+4. Click **`Generate Lighting Scene`**.
 
 ### B. Batch Generation (Multi-Select with YAML Mapping)
 When selecting multiple shots in the Launcher UI and clicking **`Generate`**:
 1. ZeroXe presents a batch confirmation modal:
-   - **`Select YAML File...`**: Pick a `.yaml` file defining which assets belong in FG for each shot.
-   - **`Use Default (All in FG)`**: Headlessly assign all non-set assets to FG.
+   - **`Use Default Setup (All assets in BG)`**: Route all assets to BG by default.
+   - **`Use YAML Configuration File`**: Pick a `.yaml` file defining which assets belong in FG for each shot.
    - **`Cancel`**: Abort batch execution.
 2. ZeroXe iterates through all selected shots, resolves the FG list per-shot from the YAML file, and generates all Blender files automatically.
 
