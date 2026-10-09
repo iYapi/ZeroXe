@@ -769,10 +769,6 @@ class NotificationService:
 
         cls._parent_window = parent_window
 
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            logger.info("System tray is not available in current environment; running without system tray.")
-            return None
-
         try:
             # Check system tray support
             tray = QSystemTrayIcon(parent_window)
@@ -807,7 +803,11 @@ class NotificationService:
             tray.activated.connect(cls._on_tray_activated)
             tray.messageClicked.connect(cls._on_message_clicked)
 
-            tray.show()
+            try:
+                tray.show()
+            except Exception as ex:
+                logger.debug(f"Tray icon show error: {ex}")
+
             logger.info("NotificationService initialized with QSystemTrayIcon.")
             return tray
         except Exception as e:
@@ -1005,7 +1005,7 @@ class NotificationService:
         cls.signals.notification_added.emit(record)
 
         # 2. Native OS System Notification (pops in OS notification center / tray)
-        if cls._tray_icon is not None and QSystemTrayIcon.isSystemTrayAvailable():
+        if cls._tray_icon is not None:
             try:
                 cls._tray_icon.showMessage(title, message, icon_type, msecs)
             except Exception as e:

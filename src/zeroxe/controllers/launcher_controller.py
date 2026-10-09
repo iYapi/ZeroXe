@@ -472,7 +472,7 @@ class LauncherController(QObject):
             self.load_assets()
 
     def load_shots(self) -> None:
-        """Fetch shots via ShotService and populate item list."""
+        """Fetch shots via ShotService and populate item list with loading popup."""
         if not self.current_project:
             return
 
@@ -490,9 +490,33 @@ class LauncherController(QObject):
                 shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
                 self._populate_shots(shots)
             else:
-                self._fetch_shots_async(target_ep)
+                try:
+                    shots = run_async_task(
+                        self.view,
+                        "Loading Shots",
+                        f"Fetching shots for {selected_category} from Kitsu...",
+                        ShotService.get_shots_by_episode_id,
+                        target_ep.id,
+                        episode_name=target_ep.name,
+                    ) or []
+                    self._populate_shots(shots)
+                except Exception as e:
+                    logger.error(f"Failed to fetch shots for episode {selected_category}: {e}")
+                    self._clear_item_details()
         elif self.current_project:
-            self._fetch_shots_by_sequence_async(selected_category, self.current_project.id)
+            try:
+                shots = run_async_task(
+                    self.view,
+                    "Loading Shots",
+                    f"Fetching shots for {selected_category} from Kitsu...",
+                    ShotService.get_shots_by_sequence,
+                    episode=selected_category,
+                    project_id=self.current_project.id,
+                ) or []
+                self._populate_shots(shots)
+            except Exception as e:
+                logger.error(f"Failed to fetch shots for sequence {selected_category}: {e}")
+                self._clear_item_details()
 
     def _populate_shots(self, shots: List[Shot]) -> None:
         """Populate item_source_model with shots and auto-select first item."""
@@ -515,79 +539,8 @@ class LauncherController(QObject):
         except (RuntimeError, AttributeError):
             pass
 
-    def _fetch_shots_async(self, target_ep: Episode) -> None:
-        """Fetch shots for an episode asynchronously on a background thread without blocking popup."""
-        if hasattr(self, "_shot_fetch_worker") and self._shot_fetch_worker and self._shot_fetch_worker.isRunning():
-            self._shot_fetch_worker.quit()
-            self._shot_fetch_worker.wait(50)
-
-        ep_id = target_ep.id
-        ep_name = target_ep.name
-
-        worker = AsyncWorker(
-            ShotService.get_shots_by_episode_id,
-            ep_id,
-            episode_name=ep_name,
-        )
-        self._shot_fetch_worker = worker
-
-        def on_finished(shots):
-            try:
-                if not hasattr(self, "view") or not self.view:
-                    return
-                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == ep_name:
-                    self._populate_shots(shots or [])
-            except (RuntimeError, AttributeError):
-                pass
-
-        def on_failed(err, tb):
-            try:
-                logger.error(f"Failed to fetch shots for episode {ep_name}: {err}")
-                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == ep_name:
-                    self._clear_item_details()
-            except (RuntimeError, AttributeError):
-                pass
-
-        worker.task_finished.connect(on_finished, Qt.ConnectionType.QueuedConnection)
-        worker.task_failed.connect(on_failed, Qt.ConnectionType.QueuedConnection)
-        worker.start()
-
-    def _fetch_shots_by_sequence_async(self, sequence_or_ep: str, project_id: str) -> None:
-        """Fetch shots by sequence or episode name asynchronously without modal popup."""
-        if hasattr(self, "_shot_fetch_worker") and self._shot_fetch_worker and self._shot_fetch_worker.isRunning():
-            self._shot_fetch_worker.quit()
-            self._shot_fetch_worker.wait(50)
-
-        worker = AsyncWorker(
-            ShotService.get_shots_by_sequence,
-            episode=sequence_or_ep,
-            project_id=project_id,
-        )
-        self._shot_fetch_worker = worker
-
-        def on_finished(shots):
-            try:
-                if not hasattr(self, "view") or not self.view:
-                    return
-                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == sequence_or_ep:
-                    self._populate_shots(shots or [])
-            except (RuntimeError, AttributeError):
-                pass
-
-        def on_failed(err, tb):
-            try:
-                logger.error(f"Failed to fetch shots for {sequence_or_ep}: {err}")
-                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == sequence_or_ep:
-                    self._clear_item_details()
-            except (RuntimeError, AttributeError):
-                pass
-
-        worker.task_finished.connect(on_finished, Qt.ConnectionType.QueuedConnection)
-        worker.task_failed.connect(on_failed, Qt.ConnectionType.QueuedConnection)
-        worker.start()
-
     def load_assets(self) -> None:
-        """Fetch assets via AssetService and populate item list."""
+        """Fetch assets via AssetService and populate item list with loading popup."""
         if not self.current_project:
             return
 
@@ -606,7 +559,19 @@ class LauncherController(QObject):
             ) or []
             self._populate_assets(assets)
         else:
-            self._fetch_assets_async(self.current_project.id, selected_category)
+            try:
+                assets = run_async_task(
+                    self.view,
+                    "Loading Assets",
+                    f"Fetching {selected_category} assets from Kitsu...",
+                    AssetService.get_assets_by_type,
+                    self.current_project.id,
+                    asset_type_name=selected_category,
+                ) or []
+                self._populate_assets(assets)
+            except Exception as e:
+                logger.error(f"Failed to fetch assets for {selected_category}: {e}")
+                self._clear_item_details()
 
     def _populate_assets(self, assets: List[Asset]) -> None:
         """Populate item_source_model with assets and auto-select first item."""
@@ -1221,12 +1186,11 @@ class LauncherController(QObject):
                                 project_name=proj_name,
                             )
 
-                            is_sync = "sync" in action.lower()
                             proj_id = self.current_project.id if self.current_project else None
-                            if (is_sync or not item.assets) and item.id:
+                            if item.id:
                                 try:
                                     from zeroxe.services.shot_service import ShotService
-                                    fresh_assets = ShotService.get_assets_for_shot(item.id, project_id=proj_id, force_refresh=is_sync)
+                                    fresh_assets = ShotService.get_assets_for_shot(item.id, project_id=proj_id, force_refresh=True)
                                     if fresh_assets:
                                         item.assets = fresh_assets
                                 except Exception:
@@ -1441,13 +1405,12 @@ class LauncherController(QObject):
 
         shot_data_dict = None
         if self.current_shot:
-            is_sync = "sync" in action.lower()
             proj_id = self.current_project.id if self.current_project else None
             try:
                 from zeroxe.services.shot_service import ShotService
 
-                if (is_sync or not self.current_shot.assets) and self.current_shot.id:
-                    fresh_assets = ShotService.get_assets_for_shot(self.current_shot.id, project_id=proj_id, force_refresh=is_sync)
+                if self.current_shot.id:
+                    fresh_assets = ShotService.get_assets_for_shot(self.current_shot.id, project_id=proj_id, force_refresh=True)
                     if fresh_assets:
                         self.current_shot.assets = fresh_assets
             except Exception as e:

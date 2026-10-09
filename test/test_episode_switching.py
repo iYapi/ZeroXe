@@ -110,7 +110,7 @@ def test_episode_change_instant_cached(qtbot):
 
 
 def test_episode_change_async_non_cached(qtbot):
-    """Verify switching episodes when cache is empty fetches in background without modal dialog."""
+    """Verify switching episodes when cache is empty triggers run_async_task loading popup."""
     view = LauncherView()
     qtbot.addWidget(view)
     controller = view.controller
@@ -128,22 +128,11 @@ def test_episode_change_async_non_cached(qtbot):
         Shot.from_kitsu({"id": "s1", "name": "sh0010", "sequence": "sq01", "episode": "ep01"}),
     ]
 
-    with patch.object(ShotService, "get_shots_by_episode_id", return_value=mock_shots) as mock_get_shots, \
-         patch("zeroxe.controllers.launcher_controller.run_async_task") as mock_async_task:
-
+    with patch("zeroxe.controllers.launcher_controller.run_async_task", return_value=mock_shots) as mock_async_task:
         # Switch to ep01
         view.ui.comboBox_category.setCurrentText("ep01")
 
-        # Wait for worker thread to finish execution
-        if hasattr(controller, "_shot_fetch_worker") and controller._shot_fetch_worker:
-            controller._shot_fetch_worker.wait(3000)
-
-        # Allow queued Qt slots to run
-        qtbot.waitUntil(lambda: view.item_source_model.rowCount() == 1, timeout=3000)
-
-        # Check list is populated
+        # Assert run_async_task (modal popup) WAS called
+        mock_async_task.assert_called_once()
         assert view.item_source_model.rowCount() == 1
         assert view.item_source_model.item(0).text() == "sq01_sh0010"
-
-        # Assert run_async_task (modal popup) was NOT called
-        mock_async_task.assert_not_called()

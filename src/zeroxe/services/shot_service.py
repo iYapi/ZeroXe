@@ -152,12 +152,11 @@ class ShotService:
             seq_map: Dict[str, Sequence] = {seq.id: seq for seq in sequences if seq.id}
 
             raw_shots = gazu.shot.all_shots_for_project(project_id) or []
-            assets_results = cls._parallel_fetch_assets(raw_shots, project_id=project_id)
 
             mapped_shots: List[Shot] = []
             shots_by_episode: Dict[str, List[Shot]] = {ep.id: [] for ep in episodes if ep.id}
 
-            for shot, shot_assets in zip(raw_shots, assets_results):
+            for shot in raw_shots:
                 if not isinstance(shot, dict):
                     continue
 
@@ -172,7 +171,7 @@ class ShotService:
                 shot_dict["sequence"] = seq_name
                 shot_dict["episode_id"] = ep_id
                 shot_dict["episode"] = ep_name
-                shot_dict["assets"] = shot_assets
+                shot_dict["assets"] = []
 
                 s = Shot.from_kitsu(shot_dict)
                 mapped_shots.append(s)
@@ -200,10 +199,10 @@ class ShotService:
         episode_name: str = "",
         use_cache: bool = True,
     ) -> List[Shot]:
-        """Fetch and map all shots for an episode with populated asset list.
+        """Fetch and map all shots for an episode without eager asset fetching.
 
         Avoids the N+1 network request bottleneck by pre-mapping sequence names in O(1)
-        and fetching assets concurrently.
+        and deferring asset fetching until action execution.
         """
         if not episode_id:
             return []
@@ -234,11 +233,8 @@ class ShotService:
                 except Exception:
                     episode_name = ""
 
-            # 3. Fetch assets for all shots in parallel
-            assets_results = cls._parallel_fetch_assets(shots_raw, project_id=None)
-
             mapped_shots: List[Shot] = []
-            for shot, shot_assets in zip(shots_raw, assets_results):
+            for shot in shots_raw:
                 if not isinstance(shot, dict):
                     continue
 
@@ -249,7 +245,7 @@ class ShotService:
                 shot_dict["sequence"] = seq_name
                 shot_dict["episode_id"] = episode_id
                 shot_dict["episode"] = episode_name
-                shot_dict["assets"] = shot_assets
+                shot_dict["assets"] = []
 
                 mapped_shots.append(Shot.from_kitsu(shot_dict))
 
@@ -276,13 +272,11 @@ class ShotService:
                 return []
             try:
                 raw_shots = gazu.shot.all_shots_for_sequence(sequence_id) or []
-                assets_results = cls._parallel_fetch_assets(raw_shots, project_id=project_id)
-
                 mapped = []
-                for s, s_assets in zip(raw_shots, assets_results):
+                for s in raw_shots:
                     if isinstance(s, dict):
                         s_dict = dict(s)
-                        s_dict["assets"] = s_assets
+                        s_dict["assets"] = []
                         mapped.append(Shot.from_kitsu(s_dict))
                 return mapped
             except Exception as e:
