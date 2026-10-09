@@ -27,11 +27,14 @@ class AssetService:
     @classmethod
     def get_asset_types_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[AssetType]:
         """Fetch all asset types for a project with optional in-memory caching."""
-        if not is_kitsu_connected() or not project_id:
+        if not project_id:
             return []
 
         if use_cache and project_id in cls._asset_type_cache:
             return cls._asset_type_cache[project_id]
+
+        if not is_kitsu_connected():
+            return []
 
         try:
             raw_asset_types = gazu.asset.all_asset_types_for_project(project_id) or []
@@ -45,11 +48,14 @@ class AssetService:
     @classmethod
     def get_assets_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[Asset]:
         """Fetch all assets for a project with asset type lookup and optional in-memory caching."""
-        if not is_kitsu_connected() or not project_id:
+        if not project_id:
             return []
 
         if use_cache and project_id in cls._asset_cache:
             return cls._asset_cache[project_id]
+
+        if not is_kitsu_connected():
+            return []
 
         try:
             raw_assets = gazu.asset.all_assets_for_project(project_id) or []

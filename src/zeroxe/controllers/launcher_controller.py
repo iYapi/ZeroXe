@@ -28,7 +28,7 @@ from zeroxe.services.pipeline_service import PipelineService
 from zeroxe.services.project_service import ProjectService
 from zeroxe.services.settings_service import SettingsService
 from zeroxe.services.shot_service import ShotService
-from zeroxe.ui.loading_dialog import run_async_task
+from zeroxe.ui.loading_dialog import AsyncWorker, run_async_task
 from zeroxe.utils.log_util import (
     append_process_log,
     create_process_log_file,
@@ -417,6 +417,53 @@ class LauncherController(QObject):
         self.view.ui.comboBox_category.setCurrentIndex(0)
         self.view.ui.comboBox_category.blockSignals(False)
 
+        # Trigger non-blocking background prefetch for shots/assets across the project
+        if project_id:
+            self._prefetch_project_data_async(project_id)
+
+    def cleanup(self) -> None:
+        """Stop running background worker threads cleanly."""
+        for worker_name in ["_prefetch_worker", "_shot_fetch_worker", "_asset_fetch_worker"]:
+            if hasattr(self, worker_name):
+                worker = getattr(self, worker_name)
+                if worker and worker.isRunning():
+                    worker.quit()
+                    worker.wait(100)
+
+    def _prefetch_project_data_async(self, project_id: str) -> None:
+        """Prefetch shots and assets in background to make all category switches instant (0ms)."""
+        if hasattr(self, "_prefetch_worker") and self._prefetch_worker and self._prefetch_worker.isRunning():
+            self._prefetch_worker.quit()
+            self._prefetch_worker.wait(50)
+
+        def prefetch_task(p_id: str):
+            if p_id not in ShotService._project_shot_cache:
+                ShotService.get_shots_by_project_id(p_id)
+            if p_id not in AssetService._asset_cache:
+                AssetService.get_assets_by_project_id(p_id)
+
+        worker = AsyncWorker(prefetch_task, project_id)
+        self._prefetch_worker = worker
+
+        def on_prefetch_done(_):
+            try:
+                if not hasattr(self, "view") or not self.view:
+                    return
+                current_cat = self.view.ui.comboBox_category.currentText()
+                if current_cat and current_cat != "None" and self.view.item_source_model.rowCount() == 0:
+                    if self.is_shot_mode:
+                        target_ep = next((ep for ep in self.current_episodes if ep.name == current_cat), None)
+                        if target_ep and target_ep.id in ShotService._shot_cache:
+                            self._populate_shots(ShotService._shot_cache[target_ep.id])
+                    elif self.is_asset_mode:
+                        if self.current_project and self.current_project.id in AssetService._asset_cache:
+                            self.load_assets()
+            except (RuntimeError, AttributeError):
+                pass
+
+        worker.task_finished.connect(on_prefetch_done, Qt.ConnectionType.QueuedConnection)
+        worker.start()
+
     def load_items(self) -> None:
         """Load items (shots or assets) based on current active mode."""
         if self.is_shot_mode:
@@ -437,48 +484,107 @@ class LauncherController(QObject):
             self._clear_item_details()
             return
 
-        shots: List[Shot] = []
+        target_ep = next((ep for ep in self.current_episodes if ep.name == selected_category), None)
+        if target_ep:
+            if target_ep.id in ShotService._shot_cache:
+                shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
+                self._populate_shots(shots)
+            else:
+                self._fetch_shots_async(target_ep)
+        elif self.current_project:
+            self._fetch_shots_by_sequence_async(selected_category, self.current_project.id)
+
+    def _populate_shots(self, shots: List[Shot]) -> None:
+        """Populate item_source_model with shots and auto-select first item."""
         try:
-            target_ep = next((ep for ep in self.current_episodes if ep.name == selected_category), None)
-            if target_ep:
-                if target_ep.id in ShotService._shot_cache:
-                    shots = ShotService.get_shots_by_episode_id(target_ep.id, episode_name=target_ep.name)
-                else:
-                    shots = run_async_task(
-                        self.view,
-                        "Loading Shots",
-                        f"Fetching shots for episode '{target_ep.name}'...",
-                        ShotService.get_shots_by_episode_id,
-                        target_ep.id,
-                        episode_name=target_ep.name,
-                    ) or []
-            elif self.current_project:
-                shots = run_async_task(
-                    self.view,
-                    "Loading Shots",
-                    f"Fetching shots for episode '{selected_category}'...",
-                    ShotService.get_shots_by_sequence,
-                    episode=selected_category,
-                    project_id=self.current_project.id,
-                ) or []
-        except Exception as e:
-            logger.error(f"Failed to fetch shots: {e}")
+            self.view.item_source_model.clear()
+            shots_sorted = sorted(shots, key=lambda s: f"{s.sequence or ''}_{s.name or ''}".lower())
 
-        # Sort shots alphabetically by sequence and shot name
-        shots.sort(key=lambda s: f"{s.sequence or ''}_{s.name or ''}".lower())
+            for shot in shots_sorted:
+                seq_name = shot.sequence or ""
+                display_name = f"{seq_name}_{shot.name}" if seq_name else shot.name
+                item = QStandardItem(display_name)
+                item.setData(shot, Qt.ItemDataRole.UserRole)
+                self.view.item_source_model.appendRow(item)
 
-        for shot in shots:
-            seq_name = shot.sequence or ""
-            display_name = f"{seq_name}_{shot.name}" if seq_name else shot.name
-            item = QStandardItem(display_name)
-            item.setData(shot, Qt.ItemDataRole.UserRole)
-            self.view.item_source_model.appendRow(item)
+            if self.view.item_proxy_model.rowCount() > 0:
+                first_proxy_idx = self.view.item_proxy_model.index(0, 0)
+                self.view.ui.listView_assetList.setCurrentIndex(first_proxy_idx)
+            else:
+                self._clear_item_details()
+        except (RuntimeError, AttributeError):
+            pass
 
-        if self.view.item_proxy_model.rowCount() > 0:
-            first_proxy_idx = self.view.item_proxy_model.index(0, 0)
-            self.view.ui.listView_assetList.setCurrentIndex(first_proxy_idx)
-        else:
-            self._clear_item_details()
+    def _fetch_shots_async(self, target_ep: Episode) -> None:
+        """Fetch shots for an episode asynchronously on a background thread without blocking popup."""
+        if hasattr(self, "_shot_fetch_worker") and self._shot_fetch_worker and self._shot_fetch_worker.isRunning():
+            self._shot_fetch_worker.quit()
+            self._shot_fetch_worker.wait(50)
+
+        ep_id = target_ep.id
+        ep_name = target_ep.name
+
+        worker = AsyncWorker(
+            ShotService.get_shots_by_episode_id,
+            ep_id,
+            episode_name=ep_name,
+        )
+        self._shot_fetch_worker = worker
+
+        def on_finished(shots):
+            try:
+                if not hasattr(self, "view") or not self.view:
+                    return
+                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == ep_name:
+                    self._populate_shots(shots or [])
+            except (RuntimeError, AttributeError):
+                pass
+
+        def on_failed(err, tb):
+            try:
+                logger.error(f"Failed to fetch shots for episode {ep_name}: {err}")
+                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == ep_name:
+                    self._clear_item_details()
+            except (RuntimeError, AttributeError):
+                pass
+
+        worker.task_finished.connect(on_finished, Qt.ConnectionType.QueuedConnection)
+        worker.task_failed.connect(on_failed, Qt.ConnectionType.QueuedConnection)
+        worker.start()
+
+    def _fetch_shots_by_sequence_async(self, sequence_or_ep: str, project_id: str) -> None:
+        """Fetch shots by sequence or episode name asynchronously without modal popup."""
+        if hasattr(self, "_shot_fetch_worker") and self._shot_fetch_worker and self._shot_fetch_worker.isRunning():
+            self._shot_fetch_worker.quit()
+            self._shot_fetch_worker.wait(50)
+
+        worker = AsyncWorker(
+            ShotService.get_shots_by_sequence,
+            episode=sequence_or_ep,
+            project_id=project_id,
+        )
+        self._shot_fetch_worker = worker
+
+        def on_finished(shots):
+            try:
+                if not hasattr(self, "view") or not self.view:
+                    return
+                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == sequence_or_ep:
+                    self._populate_shots(shots or [])
+            except (RuntimeError, AttributeError):
+                pass
+
+        def on_failed(err, tb):
+            try:
+                logger.error(f"Failed to fetch shots for {sequence_or_ep}: {err}")
+                if self.is_shot_mode and self.view.ui.comboBox_category.currentText() == sequence_or_ep:
+                    self._clear_item_details()
+            except (RuntimeError, AttributeError):
+                pass
+
+        worker.task_finished.connect(on_finished, Qt.ConnectionType.QueuedConnection)
+        worker.task_failed.connect(on_failed, Qt.ConnectionType.QueuedConnection)
+        worker.start()
 
     def load_assets(self) -> None:
         """Fetch assets via AssetService and populate item list."""
@@ -493,38 +599,67 @@ class LauncherController(QObject):
             self._clear_item_details()
             return
 
-        assets: List[Asset] = []
-        try:
-            if self.current_project.id in AssetService._asset_cache:
-                assets = AssetService.get_assets_by_type(
-                    self.current_project.id,
-                    asset_type_name=selected_category,
-                ) or []
-            else:
-                assets = run_async_task(
-                    self.view,
-                    "Loading Assets",
-                    f"Fetching assets for category '{selected_category}'...",
-                    AssetService.get_assets_by_type,
-                    self.current_project.id,
-                    asset_type_name=selected_category,
-                ) or []
-        except Exception as e:
-            logger.error(f"Failed to fetch assets: {e}")
-
-        # Sort assets alphabetically by name
-        assets.sort(key=lambda a: (a.name or "").lower())
-
-        for asset in assets:
-            item = QStandardItem(asset.name)
-            item.setData(asset, Qt.ItemDataRole.UserRole)
-            self.view.item_source_model.appendRow(item)
-
-        if self.view.item_proxy_model.rowCount() > 0:
-            first_proxy_idx = self.view.item_proxy_model.index(0, 0)
-            self.view.ui.listView_assetList.setCurrentIndex(first_proxy_idx)
+        if self.current_project.id in AssetService._asset_cache:
+            assets = AssetService.get_assets_by_type(
+                self.current_project.id,
+                asset_type_name=selected_category,
+            ) or []
+            self._populate_assets(assets)
         else:
-            self._clear_item_details()
+            self._fetch_assets_async(self.current_project.id, selected_category)
+
+    def _populate_assets(self, assets: List[Asset]) -> None:
+        """Populate item_source_model with assets and auto-select first item."""
+        try:
+            self.view.item_source_model.clear()
+            assets_sorted = sorted(assets, key=lambda a: (a.name or "").lower())
+
+            for asset in assets_sorted:
+                item = QStandardItem(asset.name)
+                item.setData(asset, Qt.ItemDataRole.UserRole)
+                self.view.item_source_model.appendRow(item)
+
+            if self.view.item_proxy_model.rowCount() > 0:
+                first_proxy_idx = self.view.item_proxy_model.index(0, 0)
+                self.view.ui.listView_assetList.setCurrentIndex(first_proxy_idx)
+            else:
+                self._clear_item_details()
+        except (RuntimeError, AttributeError):
+            pass
+
+    def _fetch_assets_async(self, project_id: str, asset_type_name: str) -> None:
+        """Fetch assets for an asset type asynchronously without modal popup."""
+        if hasattr(self, "_asset_fetch_worker") and self._asset_fetch_worker and self._asset_fetch_worker.isRunning():
+            self._asset_fetch_worker.quit()
+            self._asset_fetch_worker.wait(50)
+
+        worker = AsyncWorker(
+            AssetService.get_assets_by_type,
+            project_id,
+            asset_type_name=asset_type_name,
+        )
+        self._asset_fetch_worker = worker
+
+        def on_finished(assets):
+            try:
+                if not hasattr(self, "view") or not self.view:
+                    return
+                if self.is_asset_mode and self.view.ui.comboBox_category.currentText() == asset_type_name:
+                    self._populate_assets(assets or [])
+            except (RuntimeError, AttributeError):
+                pass
+
+        def on_failed(err, tb):
+            try:
+                logger.error(f"Failed to fetch assets for {asset_type_name}: {err}")
+                if self.is_asset_mode and self.view.ui.comboBox_category.currentText() == asset_type_name:
+                    self._clear_item_details()
+            except (RuntimeError, AttributeError):
+                pass
+
+        worker.task_finished.connect(on_finished, Qt.ConnectionType.QueuedConnection)
+        worker.task_failed.connect(on_failed, Qt.ConnectionType.QueuedConnection)
+        worker.start()
 
     def get_current_entity_key(self) -> Optional[str]:
         """Construct normalized entity key for the currently selected shot/asset."""
@@ -735,13 +870,7 @@ class LauncherController(QObject):
         """Handle category (episode or asset type) selection change."""
         self.view.item_source_model.clear()
         self._clear_item_details()
-        # Defer execution with 50ms debounce so combobox popup closes and releases grabs cleanly
-        if not hasattr(self, "_category_debounce_timer"):
-            self._category_debounce_timer = QTimer(self)
-            self._category_debounce_timer.setSingleShot(True)
-            self._category_debounce_timer.timeout.connect(self.load_items)
-        self._category_debounce_timer.stop()
-        self._category_debounce_timer.start(50)
+        self.load_items()
 
     def on_item_selected(self, current, previous) -> None:
         """Handle item (shot or asset) selection."""

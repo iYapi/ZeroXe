@@ -105,3 +105,9 @@ class LauncherView(QWidget):
             "QLabel { background-color: #1a1a1e; border: 1px solid #2e2e38; border-radius: 4px; color: #888899; }"
         )
 
+    def closeEvent(self, event):
+        """Clean up background workers on close."""
+        if hasattr(self, "controller"):
+            self.controller.cleanup()
+        super().closeEvent(event)
+
