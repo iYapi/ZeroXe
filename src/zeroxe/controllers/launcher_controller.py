@@ -1221,13 +1221,18 @@ class LauncherController(QObject):
                                 project_name=proj_name,
                             )
 
-                            assets = list(item.assets) if item.assets else []
-                            if not assets and item.id:
+                            is_sync = "sync" in action.lower()
+                            proj_id = self.current_project.id if self.current_project else None
+                            if (is_sync or not item.assets) and item.id:
                                 try:
                                     from zeroxe.services.shot_service import ShotService
-                                    assets = ShotService.get_assets_for_shot(item.id)
+                                    fresh_assets = ShotService.get_assets_for_shot(item.id, project_id=proj_id, force_refresh=is_sync)
+                                    if fresh_assets:
+                                        item.assets = fresh_assets
                                 except Exception:
                                     pass
+
+                            assets = list(item.assets) if item.assets else []
 
                             formatted_assets = []
                             for a in assets:
@@ -1436,14 +1441,19 @@ class LauncherController(QObject):
 
         shot_data_dict = None
         if self.current_shot:
-            assets = list(self.current_shot.assets)
-            if not assets and self.current_shot.id:
-                try:
-                    from zeroxe.services.shot_service import ShotService
+            is_sync = "sync" in action.lower()
+            proj_id = self.current_project.id if self.current_project else None
+            try:
+                from zeroxe.services.shot_service import ShotService
 
-                    assets = ShotService.get_assets_for_shot(self.current_shot.id)
-                except Exception:
-                    pass
+                if (is_sync or not self.current_shot.assets) and self.current_shot.id:
+                    fresh_assets = ShotService.get_assets_for_shot(self.current_shot.id, project_id=proj_id, force_refresh=is_sync)
+                    if fresh_assets:
+                        self.current_shot.assets = fresh_assets
+            except Exception as e:
+                logger.debug(f"Could not refresh assets for shot before action: {e}")
+
+            assets = list(self.current_shot.assets) if self.current_shot.assets else []
 
             formatted_assets = []
             for a in assets:
@@ -1557,10 +1567,11 @@ class LauncherController(QObject):
                     except Exception as ex:
                         logger.warning(f"Failed to record version history: {ex}")
 
+                target_display = str(target_path or self.selected_file_path or "N/A")
                 QMessageBox.information(
                     self.view,
                     f"{action} Complete",
-                    msg or f"Successfully executed '{action}'",
+                    f"Successfully executed '{action}'.\n\nTarget File:\n{target_display}",
                 )
             else:
                 if "cancelled" in (msg or "").lower():

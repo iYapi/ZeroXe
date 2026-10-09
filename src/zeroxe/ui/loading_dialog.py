@@ -62,6 +62,9 @@ def get_loading_gif_path() -> Optional[Path]:
     return None
 
 
+_ACTIVE_ASYNC_WORKERS: set = set()
+
+
 class AsyncWorker(QThread):
     """Background worker thread executing tasks without blocking the Qt main event loop."""
 
@@ -81,6 +84,19 @@ class AsyncWorker(QThread):
         self.args = args
         self.kwargs = kwargs
         self._is_cancelled = False
+        self.result: Any = None
+        self.error: Optional[Exception] = None
+        self.traceback_str: str = ""
+
+    def start(self, priority: QThread.Priority = QThread.Priority.InheritPriority) -> None:
+        """Start worker thread and ensure reference retention until native OS thread terminates."""
+        _ACTIVE_ASYNC_WORKERS.add(self)
+        self.finished.connect(self._on_finished_cleanup, Qt.ConnectionType.DirectConnection)
+        super().start(priority)
+
+    def _on_finished_cleanup(self) -> None:
+        """Release global reference once thread has completely exited."""
+        _ACTIVE_ASYNC_WORKERS.discard(self)
 
     def cancel(self) -> None:
         """Signal the worker to request early termination."""
@@ -111,12 +127,13 @@ class AsyncWorker(QThread):
             if "is_cancelled" in params and "is_cancelled" not in call_kwargs:
                 call_kwargs["is_cancelled"] = self.is_cancelled
 
-            result = self.task_func(*self.args, **call_kwargs)
-            self.task_finished.emit(result)
+            self.result = self.task_func(*self.args, **call_kwargs)
+            self.task_finished.emit(self.result)
         except Exception as e:
-            tb = traceback.format_exc()
+            self.error = e
+            self.traceback_str = traceback.format_exc()
             logger.debug(f"AsyncWorker encountered error: {e}")
-            self.task_failed.emit(e, tb)
+            self.task_failed.emit(e, self.traceback_str)
 
 
 class LoadingDialog(QDialog):
@@ -312,7 +329,7 @@ class LoadingDialog(QDialog):
         self._is_finished = True
         self.result = result
         if self.worker and self.worker.isRunning():
-            self.worker.wait(3000)
+            self.worker.wait()
         self.accept()
 
     def on_worker_failed(self, error: Exception, tb: str) -> None:
@@ -321,7 +338,7 @@ class LoadingDialog(QDialog):
         self.error = error
         self.traceback_str = tb
         if self.worker and self.worker.isRunning():
-            self.worker.wait(3000)
+            self.worker.wait()
         self.reject()
 
 
@@ -351,7 +368,6 @@ def run_async_task(
     )
 
     worker = AsyncWorker(task_func, *args, **kwargs)
-    worker.setParent(dialog)
     dialog.worker = worker
 
     # Connect signals using QueuedConnection for thread safety
@@ -366,7 +382,7 @@ def run_async_task(
 
     # Ensure worker has finished execution before continuing
     if worker.isRunning():
-        worker.wait(5000)
+        worker.wait()
 
     if dialog.error is not None:
         raise dialog.error

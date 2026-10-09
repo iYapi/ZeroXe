@@ -769,40 +769,51 @@ class NotificationService:
 
         cls._parent_window = parent_window
 
-        # Check system tray support
-        tray = QSystemTrayIcon(parent_window)
-        cls._tray_icon = tray
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            logger.info("System tray is not available in current environment; running without system tray.")
+            return None
 
-        # Set default tray icon
-        icon = cls._create_default_icon()
-        tray.setIcon(icon)
-        tray.setToolTip(f"{config.APP_NAME} - Production Hub")
+        try:
+            # Check system tray support
+            tray = QSystemTrayIcon(parent_window)
+            cls._tray_icon = tray
 
-        # Build Context Menu with dynamic Notifications submenu
-        menu = QMenu()
-        restore_action = menu.addAction(f"Show {config.APP_NAME}")
-        if parent_window is not None:
-            restore_action.triggered.connect(cls._restore_window)
+            # Set default tray icon
+            icon = cls._create_default_icon()
+            tray.setIcon(icon)
+            tray.setToolTip(f"{config.APP_NAME} - Production Hub")
 
-        menu.addSeparator()
+            # Build Context Menu with dynamic Notifications submenu
+            menu = QMenu()
+            restore_action = menu.addAction(f"Show {config.APP_NAME}")
+            if parent_window is not None:
+                restore_action.triggered.connect(cls._restore_window)
 
-        # Dynamic Notification History Menu
-        cls._notification_menu = menu.addMenu("Notifications (0)")
-        cls._rebuild_notification_menu()
+            menu.addSeparator()
 
-        menu.addSeparator()
-        quit_action = menu.addAction("Quit")
-        quit_action.triggered.connect(QApplication.instance().quit)
+            # Dynamic Notification History Menu
+            cls._notification_menu = menu.addMenu("Notifications (0)")
+            cls._rebuild_notification_menu()
 
-        tray.setContextMenu(menu)
+            menu.addSeparator()
+            quit_action = menu.addAction("Quit")
+            app_inst = QApplication.instance()
+            if app_inst:
+                quit_action.triggered.connect(app_inst.quit)
 
-        # Wire activation and click events
-        tray.activated.connect(cls._on_tray_activated)
-        tray.messageClicked.connect(cls._on_message_clicked)
+            tray.setContextMenu(menu)
 
-        tray.show()
-        logger.info("NotificationService initialized with QSystemTrayIcon.")
-        return tray
+            # Wire activation and click events
+            tray.activated.connect(cls._on_tray_activated)
+            tray.messageClicked.connect(cls._on_message_clicked)
+
+            tray.show()
+            logger.info("NotificationService initialized with QSystemTrayIcon.")
+            return tray
+        except Exception as e:
+            logger.warning(f"Could not initialize system tray icon: {e}")
+            cls._tray_icon = None
+            return None
 
     @classmethod
     def _create_default_icon(cls) -> QIcon:
@@ -994,8 +1005,11 @@ class NotificationService:
         cls.signals.notification_added.emit(record)
 
         # 2. Native OS System Notification (pops in OS notification center / tray)
-        if cls._tray_icon is not None:
-            cls._tray_icon.showMessage(title, message, icon_type, msecs)
+        if cls._tray_icon is not None and QSystemTrayIcon.isSystemTrayAvailable():
+            try:
+                cls._tray_icon.showMessage(title, message, icon_type, msecs)
+            except Exception as e:
+                logger.debug(f"Failed to display OS system notification: {e}")
 
     @classmethod
     def start_kitsu_listener(cls) -> None:

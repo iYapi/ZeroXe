@@ -929,11 +929,16 @@ class PipelineService:
             if not dcc_success:
                 return False, f"Blender execution error:\n\n{dcc_output}", target_path
 
+            # If sync reported all assets already exist and no new version was created, handle gracefully
+            if "NO NEW VERSION CREATED" in dcc_output or "All Kitsu assets already exist" in dcc_output:
+                return True, f"All assets are already synchronized. Scene is up to date.\n\n{dcc_output}", filepath
+
             # Verify that the target file exists on disk
             if target_path and not Path(target_path).is_file():
                 return False, f"Blender completed but target file was not created:\n{target_path}\n\nBlender Log:\n{dcc_output}", target_path
 
-            return True, msg or f"Successfully executed '{feature_name}'", target_path
+            final_msg = f"Successfully executed '{feature_name}'.\n\nBlender Output:\n{dcc_output}" if dcc_output else (msg or f"Successfully executed '{feature_name}'")
+            return True, final_msg, target_path
 
         # If feature was executed completely within pipeline
         return is_success, msg or f"Successfully executed '{feature_name}'", target_path

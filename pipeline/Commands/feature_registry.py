@@ -198,6 +198,25 @@ def handle_sync(
 
     asset_dept = {"Asset": {"asset_type": cfg.get("asset_type", {})}}
 
+    # Resolve project_path if not provided
+    if not project_path:
+        mounts = cfg.get("global", {}).get("mounts", {}) or cfg.get("project", {}).get("mounts", {})
+        import platform
+        system = platform.system().lower()
+        if "linux" in system:
+            project_path = mounts.get("linux", "")
+        elif "windows" in system:
+            project_path = mounts.get("windows", "")
+        else:
+            project_path = mounts.get("darwin", "")
+
+    if not project_path and filepath:
+        fp_str = str(filepath).replace("\\", "/")
+        for prod_token in ("/02_production/", "/01_pre_production/", "/01_preproduction/", "/03_post_production/"):
+            if prod_token in fp_str:
+                project_path = fp_str.split(prod_token)[0]
+                break
+
     try:
         builder = SyncBuilder()
         next_ver_path = VersioningSystem.get_next_version_path(filepath)

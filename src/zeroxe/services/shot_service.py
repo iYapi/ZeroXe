@@ -106,6 +106,29 @@ class ShotService:
             return []
 
     @classmethod
+    def _parallel_fetch_assets(cls, shots: List[Any], project_id: Optional[str] = None) -> List[List[dict]]:
+        """Fetch assets for a list of shots concurrently, with graceful fallback to sequential."""
+        def _fetch(s):
+            sid = s.get("id", "") if isinstance(s, dict) else getattr(s, "id", "")
+            pid = s.get("project_id", "") if isinstance(s, dict) else getattr(s, "project_id", project_id or "")
+            if sid:
+                try:
+                    return cls.get_assets_for_shot(sid, project_id=pid)
+                except Exception:
+                    return []
+            return []
+
+        if not shots:
+            return []
+
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(16, max(1, len(shots)))) as executor:
+                return list(executor.map(_fetch, shots))
+        except (RuntimeError, Exception):
+            return [_fetch(s) for s in shots]
+
+    @classmethod
     def get_shots_by_project_id(cls, project_id: str, use_cache: bool = True) -> List[Shot]:
         """Fetch and map all shots and sequences for an entire project in bulk.
 
@@ -129,11 +152,12 @@ class ShotService:
             seq_map: Dict[str, Sequence] = {seq.id: seq for seq in sequences if seq.id}
 
             raw_shots = gazu.shot.all_shots_for_project(project_id) or []
+            assets_results = cls._parallel_fetch_assets(raw_shots, project_id=project_id)
 
             mapped_shots: List[Shot] = []
             shots_by_episode: Dict[str, List[Shot]] = {ep.id: [] for ep in episodes if ep.id}
 
-            for shot in raw_shots:
+            for shot, shot_assets in zip(raw_shots, assets_results):
                 if not isinstance(shot, dict):
                     continue
 
@@ -148,7 +172,7 @@ class ShotService:
                 shot_dict["sequence"] = seq_name
                 shot_dict["episode_id"] = ep_id
                 shot_dict["episode"] = ep_name
-                shot_dict["assets"] = shot.get("assets", []) if isinstance(shot.get("assets"), list) else []
+                shot_dict["assets"] = shot_assets
 
                 s = Shot.from_kitsu(shot_dict)
                 mapped_shots.append(s)
@@ -176,9 +200,10 @@ class ShotService:
         episode_name: str = "",
         use_cache: bool = True,
     ) -> List[Shot]:
-        """Fetch and map all shots for an episode in a single optimized query.
+        """Fetch and map all shots for an episode with populated asset list.
 
-        Avoids the N+1 network request bottleneck by pre-mapping sequence names in O(1).
+        Avoids the N+1 network request bottleneck by pre-mapping sequence names in O(1)
+        and fetching assets concurrently.
         """
         if not episode_id:
             return []
@@ -209,9 +234,11 @@ class ShotService:
                 except Exception:
                     episode_name = ""
 
-            # 3. Map shots without blocking HTTP loops
+            # 3. Fetch assets for all shots in parallel
+            assets_results = cls._parallel_fetch_assets(shots_raw, project_id=None)
+
             mapped_shots: List[Shot] = []
-            for shot in shots_raw:
+            for shot, shot_assets in zip(shots_raw, assets_results):
                 if not isinstance(shot, dict):
                     continue
 
@@ -222,8 +249,7 @@ class ShotService:
                 shot_dict["sequence"] = seq_name
                 shot_dict["episode_id"] = episode_id
                 shot_dict["episode"] = episode_name
-                # Keep assets list empty for initial list load; fetch on-demand when clicked
-                shot_dict["assets"] = shot.get("assets", []) if isinstance(shot.get("assets"), list) else []
+                shot_dict["assets"] = shot_assets
 
                 mapped_shots.append(Shot.from_kitsu(shot_dict))
 
@@ -250,7 +276,15 @@ class ShotService:
                 return []
             try:
                 raw_shots = gazu.shot.all_shots_for_sequence(sequence_id) or []
-                return [Shot.from_kitsu(s) for s in raw_shots if isinstance(s, dict)]
+                assets_results = cls._parallel_fetch_assets(raw_shots, project_id=project_id)
+
+                mapped = []
+                for s, s_assets in zip(raw_shots, assets_results):
+                    if isinstance(s, dict):
+                        s_dict = dict(s)
+                        s_dict["assets"] = s_assets
+                        mapped.append(Shot.from_kitsu(s_dict))
+                return mapped
             except Exception as e:
                 logger.error(f"Failed to fetch shots for sequence {sequence_id}: {e}")
                 return []
@@ -289,23 +323,96 @@ class ShotService:
         return []
 
     @classmethod
-    def get_assets_for_shot(cls, shot_id: str) -> List[dict]:
-        """Fetch assets linked to a specific shot on-demand when inspected."""
+    def get_assets_for_shot(
+        cls,
+        shot_id: str,
+        project_id: Optional[str] = None,
+        force_refresh: bool = True,
+    ) -> List[dict]:
+        """Fetch assets and castings linked to a specific shot on-demand."""
         if not is_kitsu_connected() or not shot_id:
             return []
 
+        if force_refresh:
+            try:
+                import gazu.cache
+                gazu.cache.clear_all()
+            except Exception:
+                pass
+
+        assets_by_id: Dict[str, dict] = {}
+
+        # 1. Direct assets for shot
         try:
             raw_assets = gazu.asset.all_assets_for_shot(shot_id) or []
-            return [
-                {
-                    "id": a.get("id") if isinstance(a, dict) else getattr(a, "id", ""),
-                    "name": a.get("name") if isinstance(a, dict) else getattr(a, "name", ""),
-                    "entity_type_id": (
-                        a.get("entity_type_id") if isinstance(a, dict) else getattr(a, "entity_type_id", None)
-                    ),
-                }
-                for a in raw_assets
-            ]
+            for a in raw_assets:
+                aid = a.get("id") if isinstance(a, dict) else getattr(a, "id", "")
+                aname = a.get("name") if isinstance(a, dict) else getattr(a, "name", "")
+                atype = a.get("entity_type_id") if isinstance(a, dict) else getattr(a, "entity_type_id", None)
+                if aid and aname:
+                    assets_by_id[aid] = {
+                        "id": aid,
+                        "name": aname,
+                        "entity_type_id": atype,
+                    }
         except Exception as e:
-            logger.warning(f"Could not load assets for shot {shot_id}: {e}")
-            return []
+            logger.debug(f"gazu.asset.all_assets_for_shot failed for {shot_id}: {e}")
+
+        # 2. Shot casting / entity links from Kitsu Casting tab
+        if hasattr(gazu, "casting"):
+            try:
+                castings = []
+                if project_id:
+                    castings = gazu.casting.get_shot_casting({"id": shot_id, "project_id": project_id}) or []
+                if not castings:
+                    try:
+                        shot_obj = gazu.shot.get_shot(shot_id)
+                        p_id = shot_obj.get("project_id") if isinstance(shot_obj, dict) else getattr(shot_obj, "project_id", "")
+                        if p_id:
+                            castings = gazu.casting.get_shot_casting({"id": shot_id, "project_id": p_id}) or []
+                    except Exception:
+                        pass
+
+                for c in castings:
+                    aid = c.get("asset_id") if isinstance(c, dict) else getattr(c, "asset_id", "")
+                    if aid and aid not in assets_by_id:
+                        try:
+                            asset_obj = gazu.asset.get_asset(aid)
+                            if asset_obj:
+                                aname = asset_obj.get("name") if isinstance(asset_obj, dict) else getattr(asset_obj, "name", "")
+                                atype = asset_obj.get("entity_type_id") if isinstance(asset_obj, dict) else getattr(asset_obj, "entity_type_id", None)
+                                if aname:
+                                    assets_by_id[aid] = {
+                                        "id": aid,
+                                        "name": aname,
+                                        "entity_type_id": atype,
+                                    }
+                        except Exception as ex:
+                            logger.debug(f"Could not resolve cast asset {aid}: {ex}")
+            except Exception as e:
+                logger.debug(f"gazu.casting.get_shot_casting failed for {shot_id}: {e}")
+
+        # 3. Asset instances
+        if hasattr(gazu.shot, "get_asset_instances_for_shot"):
+            try:
+                instances = gazu.shot.get_asset_instances_for_shot(shot_id) or []
+                for inst in instances:
+                    aid = inst.get("asset_id") if isinstance(inst, dict) else getattr(inst, "asset_id", "")
+                    if aid and aid not in assets_by_id:
+                        try:
+                            asset_obj = gazu.asset.get_asset(aid)
+                            if asset_obj:
+                                aname = asset_obj.get("name") if isinstance(asset_obj, dict) else getattr(asset_obj, "name", "")
+                                atype = asset_obj.get("entity_type_id") if isinstance(asset_obj, dict) else getattr(asset_obj, "entity_type_id", None)
+                                if aname:
+                                    assets_by_id[aid] = {
+                                        "id": aid,
+                                        "name": aname,
+                                        "entity_type_id": atype,
+                                    }
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        result_list = list(assets_by_id.values())
+        return result_list

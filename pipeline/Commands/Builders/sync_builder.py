@@ -46,21 +46,40 @@ class SyncBuilder:
         next_ver_path = VersioningSystem.get_next_version_path(current_file)
         final_path = filepath.get("final") or VersioningSystem.get_master_path(current_file)
 
+        # Deduce project_path from current_file if missing
+        if not project_path and current_file:
+            fp_str = str(current_file).replace("\\", "/")
+            for prod_token in ("/02_production/", "/01_pre_production/", "/01_preproduction/", "/03_post_production/"):
+                if prod_token in fp_str:
+                    project_path = fp_str.split(prod_token)[0]
+                    break
+
         # 1. Resolve asset types from configuration
         asset_types = asset_department.get("Asset", {}).get("asset_type", {})
         if not asset_types and "asset_type" in asset_department:
             asset_types = asset_department.get("asset_type", {})
 
-        # 2. Gather shot assets from shot_data (or fetch on-demand if empty)
-        raw_assets = shot_data.get("assets", []) or []
-        if not raw_assets and shot_data.get("id"):
+        # 2. Gather shot assets from shot_data and Kitsu live query
+        raw_assets = list(shot_data.get("assets", []) or [])
+        shot_id = shot_data.get("id") or ""
+        proj_id = shot_data.get("project_id") or ""
+        if shot_id:
             try:
-                import gazu
-                raw_assets = gazu.asset.all_assets_for_shot(shot_data["id"]) or []
+                from zeroxe.services.shot_service import ShotService
+                live_assets = ShotService.get_assets_for_shot(shot_id, project_id=proj_id, force_refresh=True)
+                if live_assets:
+                    # Merge live assets, avoiding duplicates by id or name
+                    existing_ids = {a.get("id") for a in raw_assets if isinstance(a, dict) and a.get("id")}
+                    existing_names = {a.get("name") for a in raw_assets if isinstance(a, dict) and a.get("name")}
+                    for la in live_assets:
+                        if la.get("id") not in existing_ids and la.get("name") not in existing_names:
+                            raw_assets.append(la)
             except Exception:
                 try:
-                    from zeroxe.services.shot_service import ShotService
-                    raw_assets = ShotService.get_assets_for_shot(shot_data["id"]) or []
+                    import gazu
+                    gazu_assets = gazu.asset.all_assets_for_shot(shot_id) or []
+                    if gazu_assets and not raw_assets:
+                        raw_assets = gazu_assets
                 except Exception:
                     pass
 
@@ -107,12 +126,30 @@ class SyncBuilder:
                 continue
 
             code = config.get("code") or ("set" if name.startswith("s-") else ("chr" if name.startswith("c-") else ("prp" if name.startswith("p-") else "vhc")))
+            prefix = config.get("prefix", "")
             base_dir = config.get("base_path") or ""
             proj_root = (project_path or "").rstrip("/\\")
             if proj_root and isinstance(base_dir, str):
                 base_dir = base_dir.replace("@project_path@", proj_root)
 
-            file_path = str(Path(base_dir) / name / f"{name}.blend") if base_dir else f"{name}.blend"
+            # Robust candidate paths on disk (with prefix, without prefix, direct)
+            candidates = []
+            if base_dir:
+                base_p = Path(base_dir)
+                candidates.append(base_p / name / f"{name}.blend")
+                candidates.append(base_p / name / "final" / f"{name}.blend")
+                if prefix and not name.startswith(prefix):
+                    candidates.append(base_p / f"{prefix}{name}" / f"{prefix}{name}.blend")
+                    candidates.append(base_p / f"{prefix}{name}" / "final" / f"{prefix}{name}.blend")
+                if prefix and name.startswith(prefix):
+                    clean_unprefixed = name[len(prefix):]
+                    candidates.append(base_p / clean_unprefixed / f"{clean_unprefixed}.blend")
+                    candidates.append(base_p / clean_unprefixed / "final" / f"{clean_unprefixed}.blend")
+                
+                existing_file = next((c for c in candidates if c.is_file()), None)
+                file_path = str(existing_file) if existing_file else str(candidates[0])
+            else:
+                file_path = f"{name}.blend"
 
             if code not in collections_dict:
                 collections_dict[code] = []
@@ -164,9 +201,12 @@ final_filepath = "$FINAL_FILEPATH"
 is_layout = $IS_LAYOUT
 is_lighting = $IS_LIGHTING
 
-print("=" * 60)
-print(f"[SYNC] Starting Asset Sync for: {current_file}")
-print("=" * 60)
+print("=" * 70)
+print("[SYNC] ZeroXe DCC Asset Synchronization")
+print(f" Target File      : {current_file}")
+print(f" Next Version Path: {next_version_path}")
+print(f" Master File Path : {final_filepath}")
+print("=" * 70)
 
 # 1. Open current working file if exists
 if current_file and Path(current_file).is_file():
@@ -195,37 +235,77 @@ def ensure_collection(name: str, parent=None) -> bpy.types.Collection:
 def get_existing_asset_names() -> set:
 	existing = set()
 	
-	# Check all collections (by collection name and base name)
+	# 1. Check all collections (exact collection name, stem, and clean name without suffixes)
 	for col in bpy.data.collections:
 		c_name = col.name.strip()
 		existing.add(c_name.lower())
-		# Handle name without suffixes like _lo, _hi, .001
-		base = c_name.split(".")[0].rstrip("_lo").rstrip("_hi")
+		base = c_name.split(".")[0]
 		existing.add(base.lower())
+		if base.lower().endswith("_lo"):
+			existing.add(base[:-3].lower())
+		elif base.lower().endswith("_hi"):
+			existing.add(base[:-3].lower())
 
-	# Check libraries
+	# 2. Check linked libraries (filepath stems)
 	for lib in bpy.data.libraries:
 		if lib.filepath:
 			stem = Path(bpy.path.abspath(lib.filepath)).stem
 			existing.add(stem.lower())
+			if stem.lower().endswith("_lo"):
+				existing.add(stem[:-3].lower())
+			elif stem.lower().endswith("_hi"):
+				existing.add(stem[:-3].lower())
 
-	# Check top-level objects
+	# 3. Check direct library objects
 	for obj in bpy.data.objects:
-		obj_base = obj.name.split(".")[0].split(":")[0]
-		existing.add(obj_base.lower())
+		if obj.instance_collection:
+			inst_name = obj.instance_collection.name.split(".")[0]
+			existing.add(inst_name.lower())
 
 	return existing
 
-existing_names = get_existing_asset_names()
-print(f"[SYNC] Found {len(existing_names)} existing asset references in Blender scene.")
-
-# 2. Identify new assets from Kitsu not yet present in Blender scene
-new_assets_to_link = {}
+# --- SECTION 1: KITSU ASSETS ---
+print("\\n=== [1/4] KITSU ASSETS REGISTERED FOR SHOT ===")
 total_kitsu_assets = 0
+for cat_code, asset_list in kitsu_assets.items():
+	print(f" Category: [{cat_code}] ({len(asset_list)} asset(s))")
+	for item in asset_list:
+		total_kitsu_assets += 1
+		a_name = item.get("name", "")
+		a_path = item.get("path", "")
+		exists_str = "FOUND ON DISK" if Path(a_path).is_file() else "MISSING ON DISK"
+		print(f"  • {a_name} -> {a_path} [{exists_str}]")
+if total_kitsu_assets == 0:
+	print("  (No casting or assets linked in Kitsu for this shot)")
+
+# --- SECTION 2: BLENDER SCENE CONTENTS ---
+print("\\n=== [2/4] CURRENT BLENDER SCENE CONTENTS ===")
+print(f" Collections in Scene ({len(bpy.data.collections)}):")
+for col in bpy.data.collections:
+	print(f"  • Collection: '{col.name}' (Objects: {len(col.objects)})")
+
+print(f" Linked Libraries in Scene ({len(bpy.data.libraries)}):")
+for lib in bpy.data.libraries:
+	print(f"  • Library: '{lib.filepath}' (name='{lib.name}')")
+
+print(f" Objects in Scene ({len(bpy.data.objects)}):")
+for obj in bpy.data.objects:
+	if obj.instance_collection:
+		print(f"  • Instance: '{obj.name}' -> Collection: '{obj.instance_collection.name}'")
+	elif obj.library:
+		print(f"  • Library Obj: '{obj.name}' (type={obj.type}, lib={obj.library.name})")
+
+existing_names = get_existing_asset_names()
+print(f" Registered Existing Asset Keys ({len(existing_names)}):")
+for k in sorted(existing_names):
+	print(f"  - '{k}'")
+
+# --- SECTION 3: COMPARISON & DECISION ---
+print("\\n=== [3/4] SYNC ASSET COMPARISON & DECISION ===")
+new_assets_to_link = {}
 
 for cat_code, asset_list in kitsu_assets.items():
 	for item in asset_list:
-		total_kitsu_assets += 1
 		asset_name = item.get("name", "").strip()
 		if not asset_name:
 			continue
@@ -233,27 +313,42 @@ for cat_code, asset_list in kitsu_assets.items():
 		clean_name = asset_name.lower()
 		target_col_name = f"{asset_name}_lo" if cat_code == "set" and not is_lighting else (f"{asset_name}_hi" if cat_code == "set" else asset_name)
 
-		# Check if already present in scene
+		# Extract unprefixed base name (e.g. c-hero -> hero)
+		unprefixed_name = clean_name
+		for pref in ("c-", "p-", "s-", "v-", "chr_", "prp_", "set_", "vhc_"):
+			if clean_name.startswith(pref):
+				unprefixed_name = clean_name[len(pref):]
+				break
+
+		# Exact matching check
 		is_present = (
 			clean_name in existing_names
+			or unprefixed_name in existing_names
 			or target_col_name.lower() in existing_names
-			or any(clean_name == e or clean_name in e for e in existing_names)
+			or f"{clean_name}_lo" in existing_names
+			or f"{clean_name}_hi" in existing_names
 		)
 
-		if not is_present:
+		if is_present:
+			print(f"  [EXISTS] '{asset_name}' is already present in scene. (Preserved)")
+		else:
+			print(f"  [MISSING] '{asset_name}' is NOT in scene -> Queued for linking into '{cat_code}'")
 			if cat_code not in new_assets_to_link:
 				new_assets_to_link[cat_code] = []
 			new_assets_to_link[cat_code].append(item)
 
-# 3. Evaluate Sync Decision
+# --- SECTION 4: LINKING & VERSIONING ---
 num_new_assets = sum(len(items) for items in new_assets_to_link.values())
-print(f"[SYNC] Kitsu Total Assets: {total_kitsu_assets} | New Missing Assets to Link: {num_new_assets}")
+print("\\n=== [4/4] SYNC EXECUTION SUMMARY ===")
+print(f" Total Kitsu Assets    : {total_kitsu_assets}")
+print(f" Missing Assets to Link: {num_new_assets}")
 
 if num_new_assets == 0:
-	print("[SYNC] All Kitsu assets already exist in Blender scene. (Existing scene elements preserved).")
+	print("\\n[SYNC] All Kitsu assets already exist in Blender scene. (Existing scene elements preserved).")
 	print("[SYNC] NO NEW VERSION CREATED.")
 else:
-	print(f"[SYNC] Linking {num_new_assets} new asset(s) into scene...")
+	print(f"\\n[SYNC] Linking {num_new_assets} new asset(s) into scene...")
+	linked_assets_count = 0
 
 	for cat_code, items in new_assets_to_link.items():
 		cat_col = ensure_collection(cat_code)
@@ -264,10 +359,19 @@ else:
 			coll_to_load = f"{asset_name}_lo" if cat_code == "set" and not is_lighting else (f"{asset_name}_hi" if cat_code == "set" else asset_name)
 
 			if not asset_path.is_file():
-				print(f"[SYNC WARNING] Asset file does not exist on disk: {asset_path}")
-				continue
+				candidates = [
+					asset_path,
+					asset_path.parent / f"{asset_name}.blend",
+					asset_path.parent / "final" / f"{asset_name}.blend",
+				]
+				found_path = next((p for p in candidates if p.is_file()), None)
+				if found_path:
+					asset_path = found_path
+				else:
+					print(f"[SYNC WARNING] Asset file does not exist on disk: {asset_path}")
+					continue
 
-			print(f"[SYNC] Linking '{coll_to_load}' from {asset_path} -> '{cat_code}'...")
+			print(f"[SYNC] Linking '{coll_to_load}' from {asset_path} -> Collection '{cat_code}'...")
 
 			try:
 				with bpy.data.libraries.load(str(asset_path), link=True) as (data_from, data_to):
@@ -276,10 +380,12 @@ else:
 					elif asset_name in data_from.collections:
 						data_to.collections = [asset_name]
 					else:
-						# Fallback to any collection starting with prefix
-						match_col = next((c for c in data_from.collections if c.startswith(asset_name)), None)
+						# Fallback to collection matching name or unprefixed name
+						match_col = next((c for c in data_from.collections if c.lower() == asset_name.lower() or c.startswith(asset_name)), None)
 						if match_col:
 							data_to.collections = [match_col]
+						elif data_from.collections:
+							data_to.collections = [data_from.collections[0]]
 						else:
 							print(f"[SYNC WARNING] Collection '{coll_to_load}' not found in {asset_path}")
 							continue
@@ -314,6 +420,7 @@ else:
 							bpy.context.scene.collection.children.unlink(over_col)
 
 					bpy.context.view_layer.update()
+					linked_assets_count += 1
 					print(f"[SYNC] Successfully linked '{linked_col.name}' into '{cat_code}'")
 
 			except Exception as ex:
@@ -330,9 +437,9 @@ else:
 		bpy.ops.wm.save_as_mainfile(filepath=final_filepath)
 		print(f"[SYNC] Updated master file: {final_filepath}")
 
-print("=" * 60)
+print("=" * 70)
 print("[SYNC] Synchronization finished.")
-print("=" * 60)
+print("=" * 70)
 """
             )
         )
