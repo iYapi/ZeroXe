@@ -4,9 +4,11 @@ Mediates business logic, persistent configuration (QSettings),
 and user interactions for SettingsView. Encrypts sensitive credentials locally.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import QObject, QSettings, Signal
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from zeroxe import config
 from zeroxe.api.gazu_client import init_kitsu
@@ -24,7 +26,7 @@ class SettingController(QObject):
     settings_changed = Signal()
 
 
-    def __init__(self, view: "SettingsView"):
+    def __init__(self, view: SettingsView):
         super().__init__(view)
         self.view = view
         self.settings = QSettings(config.ORGANIZATION_NAME, config.APP_NAME)
@@ -43,8 +45,22 @@ class SettingController(QObject):
         sw_ui = self.view.software_ui
         sw_ui.toolButton_locateBlender.clicked.connect(self.on_locate_blender)
         sw_ui.toolButton_addBlender.clicked.connect(self.on_add_blender)
-        sw_ui.pushButton_applyBlender.clicked.connect(self.on_set_active_blender)
+        if hasattr(sw_ui, "pushButton_removeBlender"):
+            sw_ui.pushButton_removeBlender.clicked.connect(self.on_remove_blender)
+        if hasattr(sw_ui, "pushButton_applyBlender"):
+            sw_ui.pushButton_applyBlender.clicked.connect(self.on_set_active_blender)
         sw_ui.listWidget_blenderList.itemClicked.connect(self.on_blender_item_selected)
+        sw_ui.listWidget_blenderList.currentItemChanged.connect(
+            lambda current, previous: self.on_blender_item_selected(current) if current else None
+        )
+        if hasattr(sw_ui, "lineEdit_blenderUrl"):
+            sw_ui.lineEdit_blenderUrl.returnPressed.connect(self.on_add_blender)
+
+        # Shortcut for removing Blender item with Delete key
+        self._blender_del_shortcut = QShortcut(
+            QKeySequence.StandardKey.Delete, sw_ui.listWidget_blenderList
+        )
+        self._blender_del_shortcut.activated.connect(self.on_remove_blender)
 
         # Software Settings - PureRef
         sw_ui.pushButton_locatePureref.clicked.connect(self.on_locate_pureref)
@@ -82,11 +98,16 @@ class SettingController(QObject):
         pureref_path = self.settings.value("software/pureref_path", "", type=str)
 
         self.view.software_ui.listWidget_blenderList.clear()
-        for path in blender_list:
+        selected_row = -1
+        for idx, path in enumerate(blender_list):
             if path:
                 self.view.software_ui.listWidget_blenderList.addItem(str(path))
+                if str(path) == active_blender:
+                    selected_row = idx
 
         self.view.software_ui.lineEdit_selectedBlender.setText(active_blender)
+        if selected_row >= 0:
+            self.view.software_ui.listWidget_blenderList.setCurrentRow(selected_row)
         self.view.software_ui.lineEdit_pureref.setText(pureref_path)
 
         # 3. NAS Configuration
@@ -123,6 +144,10 @@ class SettingController(QObject):
         ]
         active_blender = self.view.software_ui.lineEdit_selectedBlender.text().strip()
         pureref_path = self.view.software_ui.lineEdit_pureref.text().strip()
+
+        if active_blender and active_blender not in blender_items:
+            blender_items.append(active_blender)
+            self.view.software_ui.listWidget_blenderList.addItem(active_blender)
 
         self.settings.setValue("software/blender_paths", blender_items)
         self.settings.setValue("software/active_blender", active_blender)
@@ -234,11 +259,21 @@ class SettingController(QObject):
             "Executables (*);;All Files (*)",
         )
         if file_path:
-            self.view.software_ui.lineEdit_kitsuUrl.setText(file_path)
+            if hasattr(self.view.software_ui, "lineEdit_blenderUrl"):
+                self.view.software_ui.lineEdit_blenderUrl.setText(file_path)
+            elif hasattr(self.view.software_ui, "lineEdit_kitsuUrl"):
+                self.view.software_ui.lineEdit_kitsuUrl.setText(file_path)
 
     def on_add_blender(self) -> None:
         """Add entered path into Blender versions list."""
-        path = self.view.software_ui.lineEdit_kitsuUrl.text().strip()
+        if hasattr(self.view.software_ui, "lineEdit_blenderUrl"):
+            line_edit = self.view.software_ui.lineEdit_blenderUrl
+        elif hasattr(self.view.software_ui, "lineEdit_kitsuUrl"):
+            line_edit = self.view.software_ui.lineEdit_kitsuUrl
+        else:
+            return
+
+        path = line_edit.text().strip()
         if not path:
             return
 
@@ -247,13 +282,40 @@ class SettingController(QObject):
 
         if path not in existing_items:
             list_widget.addItem(path)
-            self.view.software_ui.lineEdit_kitsuUrl.clear()
+            line_edit.clear()
+            # If no active blender is selected yet, select the newly added one
+            if not self.view.software_ui.lineEdit_selectedBlender.text().strip():
+                self.view.software_ui.lineEdit_selectedBlender.setText(path)
+                list_widget.setCurrentRow(list_widget.count() - 1)
         else:
             QMessageBox.warning(self.view, "Warning", "This Blender path is already listed.")
 
+    def on_remove_blender(self) -> None:
+        """Remove selected Blender path from the list."""
+        list_widget = self.view.software_ui.listWidget_blenderList
+        current_row = list_widget.currentRow()
+        if current_row < 0:
+            QMessageBox.information(
+                self.view,
+                "Remove Blender",
+                "Please select a Blender path from the list to remove.",
+            )
+            return
+
+        item = list_widget.takeItem(current_row)
+        if item:
+            removed_path = item.text()
+            # If the removed blender was active, update selected line edit
+            if self.view.software_ui.lineEdit_selectedBlender.text().strip() == removed_path:
+                current_item = list_widget.currentItem()
+                self.view.software_ui.lineEdit_selectedBlender.setText(
+                    current_item.text() if current_item else ""
+                )
+
     def on_blender_item_selected(self, item) -> None:
         """Update selected blender line edit on item click."""
-        self.view.software_ui.lineEdit_selectedBlender.setText(item.text())
+        if item:
+            self.view.software_ui.lineEdit_selectedBlender.setText(item.text())
 
     def on_set_active_blender(self) -> None:
         """Confirm active Blender selection."""
