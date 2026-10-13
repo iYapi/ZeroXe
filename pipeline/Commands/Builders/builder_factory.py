@@ -908,23 +908,24 @@ class BuilderFactory:
                     logger.warning(f"Error calling builder prompt_batch_dialog: {e}")
 
         # 3. Standard Confirmation Question Dialog Fallback
-        try:
-            from PySide6.QtWidgets import QApplication, QMessageBox
+        if not kwargs.get("skip_confirm"):
+            try:
+                from PySide6.QtWidgets import QApplication, QMessageBox
 
-            if QApplication.instance() is not None:
-                p = parent or QApplication.activeWindow()
-                reply = QMessageBox.question(
-                    p,
-                    f"Confirm Batch {action}",
-                    f"You have selected {len(selected_items)} items.\n\n"
-                    f"Do you want to execute '{action}' on all {len(selected_items)} items in batch?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes,
-                )
-                if reply != QMessageBox.StandardButton.Yes:
-                    return None  # Cancelled
-        except Exception:
-            pass
+                if QApplication.instance() is not None:
+                    p = parent or QApplication.activeWindow()
+                    reply = QMessageBox.warning(
+                        p,
+                        f"Confirm Batch {action}",
+                        f"You have selected {len(selected_items)} items.\n\n"
+                        f"Are you sure you want to execute '{action}' on all {len(selected_items)} items in batch?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return None  # Cancelled
+            except Exception:
+                pass
 
         return {}
 

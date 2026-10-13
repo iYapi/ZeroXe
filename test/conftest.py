@@ -1,9 +1,16 @@
-"""Pytest test configuration and isolated QSettings fixture."""
-
 import os
+import sys
 from pathlib import Path
 import pytest
 from PySide6.QtCore import QSettings
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = REPO_ROOT / "src"
+PIPELINE_DIR = REPO_ROOT / "pipeline"
+
+for p in [str(REPO_ROOT), str(SRC_DIR), str(PIPELINE_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from zeroxe import config
 from zeroxe.services.pipeline_service import PipelineService

@@ -1087,6 +1087,11 @@ class LauncherController(QObject):
         combo = self.feature_combobox
         action = combo.currentText() if combo else ""
         if not action:
+            QMessageBox.warning(
+                self.view,
+                "No Action Selected",
+                "Please select a pipeline action to execute.",
+            )
             return
 
         active_blender = SettingsService.get_active_blender()
@@ -1113,10 +1118,34 @@ class LauncherController(QObject):
             if item_data and item_data not in selected_items:
                 selected_items.append(item_data)
 
+        if is_multi and not selected_items:
+            QMessageBox.warning(
+                self.view,
+                "No Items Selected",
+                "Please select one or more items to execute in batch mode.",
+            )
+            return
+
         # ------------------------------------------------------------------
         # A. Batch Execution (Multiple items selected)
         # ------------------------------------------------------------------
         if is_multi and len(selected_items) > 1:
+            item_names = [getattr(it, "name", str(it)) for it in selected_items]
+            preview_names = ", ".join(item_names[:5])
+            if len(item_names) > 5:
+                preview_names += f", ... (+{len(item_names) - 5} more)"
+
+            reply = QMessageBox.warning(
+                self.view,
+                f"Confirm Batch {action}",
+                f"You have selected {len(selected_items)} items:\n{preview_names}\n\n"
+                f"Are you sure you want to execute '{action}' on all {len(selected_items)} items in batch?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
             all_shot_names = []
             for row in range(self.view.item_source_model.rowCount()):
                 it = self.view.item_source_model.item(row)
@@ -1130,6 +1159,7 @@ class LauncherController(QObject):
                 parent=self.view,
                 project_name=proj_name,
                 available_shots=all_shot_names,
+                skip_confirm=True,
             )
             if batch_kwargs is None:
                 # User cancelled batch dialog/confirmation
@@ -1399,6 +1429,22 @@ class LauncherController(QObject):
                 "No File Selected",
                 "Please select a valid shot or asset version to perform this pipeline action.",
             )
+            return
+
+        item_name = (
+            self.current_shot.name
+            if self.current_shot
+            else (self.current_asset.name if self.current_asset else Path(self.selected_file_path).name)
+        )
+
+        reply = QMessageBox.warning(
+            self.view,
+            f"Confirm {action}",
+            f"Are you sure you want to execute '{action}' on '{item_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         entity_key = self.get_current_entity_key()

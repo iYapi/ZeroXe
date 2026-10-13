@@ -6,9 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/zeroxe.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/zeroxe.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/setting_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/settings_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/settings_view.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/controllers/launcher_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/conftest.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -221,7 +221,7 @@
       <workItem from="1791512544780" duration="5549000" />
       <workItem from="1791528951331" duration="1654000" />
       <workItem from="1791772855653" duration="1888000" />
-      <workItem from="1791875240127" duration="1194000" />
+      <workItem from="1791875240127" duration="2548000" />
     </task>
     <servers />
   </component>
