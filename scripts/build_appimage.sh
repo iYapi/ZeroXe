@@ -114,12 +114,22 @@ cd "${PROJECT_ROOT}"
 # Disable embedded runtime fallback and enable extract-and-run without FUSE (for Docker/CI)
 export ARCH=x86_64
 export APPIMAGE_EXTRACT_AND_RUN=1
-"${APPIMAGE_TOOL}" --appimage-extract-and-run --no-appstream "${APP_DIR}" "${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
+TARGET_APPIMAGE="${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
+"${APPIMAGE_TOOL}" --appimage-extract-and-run --no-appstream "${APP_DIR}" "${TARGET_APPIMAGE}"
+
+if [ -n "${DISTRO_TAG}" ]; then
+    DISTRO_APPIMAGE="${DIST_DIR}/${APP_DISPLAY_NAME}-${DISTRO_TAG}-x86_64.AppImage"
+    cp -f "${TARGET_APPIMAGE}" "${DISTRO_APPIMAGE}"
+    echo "==> Distro-specific artifact created: ${DISTRO_APPIMAGE}"
+fi
 
 # Fix permissions for host user when running inside containers
 chmod -R a+rwX "${DIST_DIR}" 2>/dev/null || true
 
 echo "=================================================="
 echo "AppImage build completed successfully!"
-echo "Artifact: ${DIST_DIR}/${APP_DISPLAY_NAME}-x86_64.AppImage"
+echo "Artifact: ${TARGET_APPIMAGE}"
+if [ -n "${DISTRO_TAG}" ]; then
+    echo "Distro Artifact: ${DISTRO_APPIMAGE}"
+fi
 echo "=================================================="

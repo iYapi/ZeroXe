@@ -1,0 +1,63 @@
+# Build AppImage using Fedora 42 (Cutting-edge GLIBC / Modern Linux toolchain)
+FROM fedora:42
+
+ENV TZ=UTC
+ENV APPIMAGE_EXTRACT_AND_RUN=1
+
+# Install build dependencies, GLib, and Qt/X11 runtime libraries
+RUN dnf install -y --setopt=install_weak_deps=False \
+    curl \
+    git \
+    gcc \
+    gcc-c++ \
+    make \
+    binutils \
+    glibc-devel \
+    glib2 \
+    mesa-libGL \
+    mesa-libGL-devel \
+    mesa-libEGL \
+    libxkbcommon \
+    libxkbcommon-x11 \
+    dbus-libs \
+    fontconfig \
+    freetype \
+    libxcb \
+    xcb-util-cursor \
+    xcb-util-wm \
+    xcb-util-image \
+    xcb-util-keysyms \
+    xcb-util-renderutil \
+    libX11-xcb \
+    file \
+    fuse \
+    fuse-libs \
+    ca-certificates \
+    tar \
+    gzip \
+    which \
+    findutils \
+    && dnf clean all
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /app
+
+# 1. Copy dependency files first to leverage Docker cache
+COPY pyproject.toml uv.lock* ./
+
+# 2. Sync third-party dependencies without installing root project yet
+RUN uv sync --no-install-project --dev
+
+# 3. Copy full source tree
+COPY . .
+
+# 4. Compile UI files and sync final workspace
+RUN uv run python scripts/compile_ui.py
+RUN uv sync --dev
+
+# Run compilation and AppImage build
+RUN chmod +x scripts/build_appimage.sh scripts/compile_ui.py
+CMD ["bash", "scripts/build_appimage.sh"]

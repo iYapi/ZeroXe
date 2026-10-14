@@ -412,8 +412,12 @@ python scripts/build_executable.py --onedir
 # 2. Build local AppImage (for current Linux distribution)
 ./scripts/build_appimage.sh
 
-# 3. Build 100% portable AppImage (compatible across all Linux distros)
+# 3. Build AppImage using Docker container (Interactive prompt: Ubuntu 22 or Fedora 42)
 ./scripts/build_appimage_docker.sh
+
+# Or select target directly:
+./scripts/build_appimage_docker.sh ubuntu22   # Baseline GLIBC 2.35 (universal compatibility)
+./scripts/build_appimage_docker.sh fedora42   # Modern GLIBC 2.41+ (bleeding-edge toolchain)
 ```
 
 ---

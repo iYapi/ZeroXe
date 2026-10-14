@@ -1,11 +1,12 @@
 # Build portable AppImage using Ubuntu 22.04 LTS (GLIBC 2.35)
+# Note: For explicit distro targets, see Dockerfile.ubuntu22 and Dockerfile.fedora42
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV APPIMAGE_EXTRACT_AND_RUN=1
 
-# Install build dependencies, Python, GLib, and Qt/X11 runtime libraries
+# Install build dependencies, GLib, and Qt/X11 runtime libraries
 RUN apt-get update && apt-get install -y \
     curl \
     git \

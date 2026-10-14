@@ -45,6 +45,20 @@ uv run zeroxe
 python -m zeroxe.main
 ```
 
+### 3. Packaging & Building AppImages
+
+```bash
+# Build standalone directory executable with PyInstaller
+python scripts/build_executable.py --onedir
+
+# Build AppImage inside Docker (Interactive prompt: choose Ubuntu 22 or Fedora 42)
+./scripts/build_appimage_docker.sh
+
+# Or select target directly:
+./scripts/build_appimage_docker.sh ubuntu22   # Maximum portability (GLIBC 2.35)
+./scripts/build_appimage_docker.sh fedora42   # Modern toolchain (GLIBC 2.41+)
+```
+
 ---
 
 ## ⚙️ Configuration

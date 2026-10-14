@@ -211,8 +211,12 @@ python scripts/build_executable.py --onedir
 # Build AppImage for local system
 ./scripts/build_appimage.sh
 
-# Build 100% portable AppImage for all Linux distros (via Ubuntu 22.04 container)
+# Build AppImage inside Docker (Interactive prompt: choose Ubuntu 22 or Fedora 42)
 ./scripts/build_appimage_docker.sh
+
+# Or directly target a specific distribution:
+./scripts/build_appimage_docker.sh ubuntu22   # Maximum portability (GLIBC 2.35)
+./scripts/build_appimage_docker.sh fedora42   # Modern toolchain (GLIBC 2.41+)
 ```
 
 ---
@@ -241,5 +245,7 @@ For headless test scripts (e.g. `test/test_kitsu_service.py`):
 > If you build an AppImage directly on a cutting-edge host system (e.g. Arch Linux / Fedora with GLIBC 2.44), the generated AppImage will fail on older distributions (Ubuntu 22.04/24.04, Debian 12) with:
 > `ImportError: /lib64/libm.so.6: version 'GLIBC_2.44' not found`
 >
-> **Solution**: Always use `./scripts/build_appimage_docker.sh` to package production AppImages against an Ubuntu 22.04 LTS (GLIBC 2.35) baseline so it runs across all Linux distributions.
+> **Target Selection**:
+> - **Ubuntu 22.04 LTS (`ubuntu22`)**: Package against the GLIBC 2.35 baseline for 100% universal compatibility across all mainstream Linux distributions (Ubuntu 22.04+, Debian 12+, Fedora, Arch, RHEL/Rocky 9+).
+> - **Fedora 42 (`fedora42`)**: Package against modern Fedora 42 (GLIBC 2.41+) for bleeding-edge deployments or environments standardizing on current Fedora/Red Hat stacks.
 
