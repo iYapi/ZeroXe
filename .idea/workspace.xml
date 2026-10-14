@@ -6,13 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build_info.json" beforeDir="false" afterPath="$PROJECT_DIR$/build_info.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/Dockerfile.build" beforeDir="false" afterPath="$PROJECT_DIR$/docker/Dockerfile.build" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/DEVELOPMENT_WORKFLOW.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/DEVELOPMENT_WORKFLOW.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/FULL_DEVELOPER_GUIDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/FULL_DEVELOPER_GUIDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/build_appimage.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/build_appimage.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/build_appimage_docker.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/build_appimage_docker.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/versioning.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/versioning.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -227,7 +221,7 @@
       <workItem from="1791772855653" duration="1888000" />
       <workItem from="1791875240127" duration="4881000" />
       <workItem from="1791883928976" duration="302000" />
-      <workItem from="1791945934270" duration="3345000" />
+      <workItem from="1791945934270" duration="4153000" />
     </task>
     <servers />
   </component>
