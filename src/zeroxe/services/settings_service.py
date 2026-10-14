@@ -62,6 +62,21 @@ class SettingsService:
     def get_pureref_path(cls) -> str:
         return cls._settings().value("software/pureref_path", "", type=str)
 
+    @classmethod
+    def get_dcc_timeout(cls) -> int:
+        """Return configured timeout for background DCC execution in seconds (default: 600s)."""
+        val = cls._settings().value("software/dcc_timeout", 600)
+        try:
+            return int(val) if int(val) > 0 else 600
+        except (ValueError, TypeError):
+            return 600
+
+    @classmethod
+    def set_dcc_timeout(cls, timeout: int) -> None:
+        """Persist DCC execution timeout in seconds."""
+        cls._settings().setValue("software/dcc_timeout", int(timeout))
+        cls._settings().sync()
+
     # ------------------------------------------------------------------
     # NAS Configuration
     # ------------------------------------------------------------------

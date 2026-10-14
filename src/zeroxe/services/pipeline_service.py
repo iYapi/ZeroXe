@@ -727,7 +727,7 @@ class PipelineService:
         cls,
         script: str,
         blender_path: Optional[str] = None,
-        timeout: int = 180,
+        timeout: Optional[int] = None,
     ) -> Tuple[bool, str]:
         """Execute a Python script in background headless Blender instance.
 
@@ -736,6 +736,10 @@ class PipelineService:
         active_blender = blender_path or SettingsService.get_active_blender()
         if not active_blender or not Path(active_blender).is_file():
             return False, "Blender executable path is not configured or does not exist."
+
+        effective_timeout = timeout if timeout is not None else SettingsService.get_dcc_timeout()
+        if not effective_timeout or effective_timeout <= 0:
+            effective_timeout = 600
 
         tmp_file = None
         try:
@@ -749,7 +753,7 @@ class PipelineService:
                 [active_blender, "-b", "--python", str(tmp_file)],
                 capture_output=True,
                 text=True,
-                timeout=timeout,
+                timeout=effective_timeout,
             )
 
             output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
@@ -771,8 +775,15 @@ class PipelineService:
                 pass
 
             return success, output
-        except subprocess.TimeoutExpired:
-            msg = f"Blender execution timed out after {timeout} seconds."
+        except subprocess.TimeoutExpired as e:
+            partial_out = ""
+            if e.stdout:
+                partial_out += (e.stdout.decode("utf-8", errors="replace") if isinstance(e.stdout, bytes) else str(e.stdout))
+            if e.stderr:
+                partial_out += "\n" + (e.stderr.decode("utf-8", errors="replace") if isinstance(e.stderr, bytes) else str(e.stderr))
+            msg = f"Blender execution timed out after {effective_timeout} seconds."
+            if partial_out.strip():
+                msg += f"\n\nPartial Blender Output before timeout:\n{partial_out.strip()}"
             try:
                 from zeroxe.utils.log_util import write_process_log
                 write_process_log(
@@ -905,6 +916,8 @@ class PipelineService:
             if not active_blender or not Path(active_blender).is_file():
                 return True, msg or f"Script generated successfully for '{feature_name}'", target_path
 
+            dcc_timeout = int(kwargs.get("timeout") or SettingsService.get_dcc_timeout() or 600)
+
             # If parent window is provided and Qt Application exists, show animated loading popup
             # during headless Blender execution so the UI never freezes
             try:
@@ -919,12 +932,21 @@ class PipelineService:
                         task_func=cls.execute_blender_script,
                         script=script,
                         blender_path=active_blender,
+                        timeout=dcc_timeout,
                     )
                 else:
-                    dcc_success, dcc_output = cls.execute_blender_script(script, blender_path=active_blender)
+                    dcc_success, dcc_output = cls.execute_blender_script(
+                        script,
+                        blender_path=active_blender,
+                        timeout=dcc_timeout,
+                    )
             except Exception as ex:
                 logger.warning(f"Async DCC execution error: {ex}")
-                dcc_success, dcc_output = cls.execute_blender_script(script, blender_path=active_blender)
+                dcc_success, dcc_output = cls.execute_blender_script(
+                    script,
+                    blender_path=active_blender,
+                    timeout=dcc_timeout,
+                )
 
             if not dcc_success:
                 return False, f"Blender execution error:\n\n{dcc_output}", target_path
