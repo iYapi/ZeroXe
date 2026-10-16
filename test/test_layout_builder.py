@@ -245,9 +245,42 @@ class TestLayoutBuilder(unittest.TestCase):
             with patch.object(SettingsService, "get_active_blender", return_value=sys.executable):
                 success, output = PipelineService.execute_blender_script("print(1)")
                 self.assertTrue(success)
-                _, kwargs = mock_run.call_args
+                args, kwargs = mock_run.call_args
+                cmd = args[0]
+                self.assertIn("--factory-startup", cmd)
+                self.assertIn("-b", cmd)
                 self.assertEqual(kwargs.get("timeout"), timeout)
+
+                # Verify factory_startup=False can disable it if explicitly requested
+                PipelineService.execute_blender_script("print(1)", factory_startup=False)
+                cmd_no_factory = mock_run.call_args[0][0]
+                self.assertNotIn("--factory-startup", cmd_no_factory)
+
+    def test_camera_rigs_timer_registration_in_layout_scripts(self):
+        """Verify layout clean and source shot scripts include the camera_rigs timer registration."""
+        builder = LayoutBuilder()
+        clean_script = builder.build_clean_script(
+            filepath="/tmp/f.blend",
+            version_path="/tmp/v.blend",
+            collections={},
+            setting_data={},
+        )
+        self.assertIn("bpy.app.timers.register", clean_script)
+        self.assertIn("addon_utils.enable(m.name, default_set=True, persistent=True)", clean_script)
+        self.assertIn("'camera_rigs' in m.name.lower()", clean_script)
+
+        source_script = builder.build_source_shot_script(
+            source_file="/tmp/src.blend",
+            filepath="/tmp/f.blend",
+            version_path="/tmp/v.blend",
+            kitsu_assets={},
+            setting_data={},
+        )
+        self.assertIn("bpy.app.timers.register", source_script)
+        self.assertIn("addon_utils.enable(m.name, default_set=True, persistent=True)", source_script)
+        self.assertIn("'camera_rigs' in m.name.lower()", source_script)
 
 
 if __name__ == "__main__":
     unittest.main()
+

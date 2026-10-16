@@ -425,6 +425,14 @@ from pathlib import Path
 _t0 = time.time()
 print("=== [LAYOUT BUILDER] Starting Clean Scene Generation ===")
 
+import bpy, addon_utils; bpy.app.timers.register(lambda: ([print('Aktif:', m.name, addon_utils.enable(m.name, default_set=True, persistent=True)) for m in addon_utils.modules(refresh=True) if 'camera_rigs' in m.name.lower()], None)[1], first_interval=1.0)
+try:
+	for _m in addon_utils.modules(refresh=True):
+		if 'camera_rigs' in _m.name.lower():
+			addon_utils.enable(_m.name, default_set=True, persistent=True)
+except Exception as _e:
+	print(f"[LAYOUT NOTE] Addon enable note: {_e}")
+
 collections = $COLLECTIONS
 
 # Clear all existing collections and objects before linking new ones
@@ -528,6 +536,10 @@ def add_camera_rig():
 	bpy.ops.object.select_all(action='DESELECT')
 	built = False
 	try:
+		if not hasattr(bpy.ops.object, "build_camera_rig"):
+			for _m in addon_utils.modules(refresh=True):
+				if 'camera_rigs' in _m.name.lower():
+					addon_utils.enable(_m.name, default_set=True, persistent=True)
 		if hasattr(bpy.ops.object, "build_camera_rig"):
 			bpy.ops.object.build_camera_rig(mode='DOLLY')
 			for obj in bpy.context.selected_objects:
@@ -637,6 +649,14 @@ source_file = "$SOURCE_FILE"
 print(f"=== [LAYOUT BUILDER] Opening source scene: {source_file} ===")
 bpy.ops.wm.open_mainfile(filepath=source_file)
 print(f"[LAYOUT] [{time.time()-_t0:.1f}s] Source scene opened successfully.")
+
+import bpy, addon_utils; bpy.app.timers.register(lambda: ([print('Aktif:', m.name, addon_utils.enable(m.name, default_set=True, persistent=True)) for m in addon_utils.modules(refresh=True) if 'camera_rigs' in m.name.lower()], None)[1], first_interval=1.0)
+try:
+	for _m in addon_utils.modules(refresh=True):
+		if 'camera_rigs' in _m.name.lower():
+			addon_utils.enable(_m.name, default_set=True, persistent=True)
+except Exception as _e:
+	print(f"[LAYOUT NOTE] Addon enable note: {_e}")
 
 kitsu_assets = $KITSU_ASSETS
 
@@ -805,6 +825,10 @@ def ensure_camera_rig():
 		bpy.ops.object.select_all(action='DESELECT')
 		built = False
 		try:
+			if not hasattr(bpy.ops.object, "build_camera_rig"):
+				for _m in addon_utils.modules(refresh=True):
+					if 'camera_rigs' in _m.name.lower():
+						addon_utils.enable(_m.name, default_set=True, persistent=True)
 			if hasattr(bpy.ops.object, "build_camera_rig"):
 				bpy.ops.object.build_camera_rig(mode='DOLLY')
 				for obj in bpy.context.selected_objects:

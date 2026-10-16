@@ -728,6 +728,7 @@ class PipelineService:
         script: str,
         blender_path: Optional[str] = None,
         timeout: Optional[int] = None,
+        factory_startup: bool = True,
     ) -> Tuple[bool, str]:
         """Execute a Python script in background headless Blender instance.
 
@@ -749,8 +750,13 @@ class PipelineService:
                 f.write(script)
                 tmp_file = Path(f.name)
 
+            cmd = [active_blender]
+            if factory_startup:
+                cmd.append("--factory-startup")
+            cmd.extend(["-b", "--python", str(tmp_file)])
+
             proc = subprocess.run(
-                [active_blender, "-b", "--python", str(tmp_file)],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=effective_timeout,
@@ -768,7 +774,7 @@ class PipelineService:
                     category="pipeline",
                     process_name="blender_headless",
                     content=f"Script Content:\n{script}\n\nExecution Output:\n{output}",
-                    command=[active_blender, "-b", "--python", str(tmp_file)],
+                    command=cmd,
                     exit_code=proc.returncode,
                 )
             except Exception:
