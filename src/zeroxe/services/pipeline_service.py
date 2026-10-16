@@ -881,6 +881,7 @@ class PipelineService:
                     department=department,
                     config_path=config_path,
                     setting_data=setting_data,
+                    parent=parent,
                     **kwargs,
                 )
             except Exception as e:
@@ -894,6 +895,7 @@ class PipelineService:
                     department=department,
                     config_path=config_path,
                     setting_data=setting_data,
+                    parent=parent,
                     **kwargs,
                 )
             except Exception as e:
@@ -988,8 +990,28 @@ class PipelineService:
             Dict[str, Any] of extra kwargs to pass to execute_feature, or None if the user cancelled.
         """
         config_path = cls.get_active_pipeline_yaml_path(project_name=project_name)
+
+        # 1. Check AdditionalFactory (for additional non-builder tools)
+        try:
+            from pipeline.Commands.Additional import AdditionalFactory
+
+            if AdditionalFactory.can_handle(action):
+                return AdditionalFactory.prompt_batch_parameters(
+                    action=action,
+                    selected_items=selected_items,
+                    department=department,
+                    parent=parent,
+                    config_path=config_path,
+                    available_shots=available_shots,
+                    **kwargs,
+                )
+        except Exception:
+            pass
+
+        # 2. Check BuilderFactory (for division builders)
         try:
             from pipeline.Commands.Builders.builder_factory import BuilderFactory
+
             return BuilderFactory.prompt_batch_parameters(
                 department=department,
                 action=action,
@@ -1003,6 +1025,38 @@ class PipelineService:
         except Exception as e:
             logger.warning(f"Error in prompt_batch_parameters: {e}")
             return {}
+
+    @classmethod
+    def feature_requires_dcc(cls, feature_name: str, project_name: Optional[str] = None) -> bool:
+        """Check whether a pipeline feature requires DCC (e.g. Blender) execution."""
+        module = cls.load_pipeline_module(project_name=project_name)
+        if module and hasattr(module, "feature_requires_dcc"):
+            try:
+                return bool(module.feature_requires_dcc(feature_name))
+            except Exception:
+                pass
+        try:
+            from pipeline.Commands.feature_registry import feature_requires_dcc
+            return feature_requires_dcc(feature_name)
+        except Exception:
+            return True
+
+    @classmethod
+    def feature_handles_batch(cls, feature_name: str, project_name: Optional[str] = None) -> bool:
+        """Check whether a pipeline feature natively handles batch execution for multiple items."""
+        module = cls.load_pipeline_module(project_name=project_name)
+        if module and hasattr(module, "feature_handles_batch"):
+            try:
+                return bool(module.feature_handles_batch(feature_name))
+            except Exception:
+                pass
+        try:
+            from pipeline.Commands.feature_registry import feature_handles_batch
+            return feature_handles_batch(feature_name)
+        except Exception:
+            return False
+
+
 
 
 

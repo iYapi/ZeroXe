@@ -73,6 +73,8 @@ try:
     from feature_registry import (
         PipelineFeatureResult,
         execute_feature,
+        feature_handles_batch,
+        feature_requires_dcc,
         list_available_features,
         register_feature,
     )
@@ -81,6 +83,8 @@ except Exception:
         from Commands.feature_registry import (
             PipelineFeatureResult,
             execute_feature,
+            feature_handles_batch,
+            feature_requires_dcc,
             list_available_features,
             register_feature,
         )
@@ -89,12 +93,16 @@ except Exception:
             from pipeline.Commands.feature_registry import (
                 PipelineFeatureResult,
                 execute_feature,
+                feature_handles_batch,
+                feature_requires_dcc,
                 list_available_features,
                 register_feature,
             )
         except Exception:
             PipelineFeatureResult = None
             execute_feature = None
+            feature_handles_batch = None
+            feature_requires_dcc = None
             list_available_features = None
             register_feature = None
 
@@ -109,6 +117,63 @@ except Exception:
         except Exception:
             BuilderFactory = None
             BuilderResult = None
+
+try:
+    from Additional import (
+        AdditionalFactory,
+        AdditionalFeatureResult,
+        CollectPlayblastResult,
+        CopiedFileInfo,
+        PlayblastCollector,
+        collect_playblasts,
+        get_render_path,
+        scan_playblasts,
+    )
+except Exception:
+    try:
+        from Commands.Additional import (
+            AdditionalFactory,
+            AdditionalFeatureResult,
+            CollectPlayblastResult,
+            CopiedFileInfo,
+            PlayblastCollector,
+            collect_playblasts,
+            get_render_path,
+            scan_playblasts,
+        )
+    except Exception:
+        try:
+            from pipeline.Commands.Additional import (
+                AdditionalFactory,
+                AdditionalFeatureResult,
+                CollectPlayblastResult,
+                CopiedFileInfo,
+                PlayblastCollector,
+                collect_playblasts,
+                get_render_path,
+                scan_playblasts,
+            )
+        except Exception:
+            try:
+                from playblast_collector import (
+                    CollectPlayblastResult,
+                    CopiedFileInfo,
+                    PlayblastCollector,
+                    collect_playblasts,
+                    scan_playblasts,
+                    get_render_path,
+                )
+                AdditionalFactory = None
+                AdditionalFeatureResult = None
+            except Exception:
+                AdditionalFactory = None
+                AdditionalFeatureResult = None
+                CollectPlayblastResult = None
+                CopiedFileInfo = None
+                PlayblastCollector = None
+                collect_playblasts = None
+                scan_playblasts = None
+                get_render_path = None
 
 # Default pipeline configuration location (relative to this Commands folder)
 DEFAULT_PIPELINE_YAML = _pipeline_root / "pipeline.yaml"
@@ -635,6 +700,85 @@ def run_pipeline_feature(
         }
 
     return {"success": False, "message": f"Feature '{feature_name}' not recognized."}
+
+
+# ==============================================================================
+# Playblast Collection APIs
+# ==============================================================================
+def get_pipeline_render_path(
+    config_path: Optional[Union[str, Path]] = None,
+    platform_name: Optional[str] = None,
+) -> Optional[Path]:
+    """Resolve the render path from pipeline.yaml for the current or specified platform."""
+    cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
+    if get_render_path:
+        p = get_render_path(config_path=cfg, platform_name=platform_name)
+        if p:
+            return p
+    gen = get_generator(cfg)
+    r = gen.get_render_path(platform_name)
+    return Path(r) if r else None
+
+
+def scan_shot_playblasts(
+    shots: List[Any],
+    department: str,
+    file_format: str = ".mov",
+    render_path: Optional[Union[str, Path]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    episode: Optional[str] = None,
+    sequence: Optional[str] = None,
+) -> Dict[str, Optional[Path]]:
+    """Scan render path and return a mapping of shot name -> latest playblast Path."""
+    cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
+    r_path = render_path or get_pipeline_render_path(config_path=cfg)
+    if not r_path:
+        raise ValueError(f"Could not resolve render path from pipeline configuration: {cfg}")
+
+    dept_code = department
+    if PlayblastCollector:
+        dept_code = PlayblastCollector.get_department_code(department, config_path=cfg)
+
+    if scan_playblasts:
+        return scan_playblasts(
+            render_path=r_path,
+            shots=shots,
+            dept_code=dept_code,
+            file_format=file_format,
+            episode=episode,
+            sequence=sequence,
+        )
+    return {}
+
+
+def collect_shot_playblasts(
+    destination_dir: Union[str, Path],
+    shots: List[Any],
+    department: str,
+    file_format: str = ".mov",
+    render_path: Optional[Union[str, Path]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    episode: Optional[str] = None,
+    sequence: Optional[str] = None,
+) -> Any:
+    """Collect latest playblasts for given shots from render_path into destination_dir."""
+    cfg = Path(config_path) if config_path else DEFAULT_PIPELINE_YAML
+    r_path = render_path or get_pipeline_render_path(config_path=cfg)
+    if not r_path:
+        raise ValueError(f"Could not resolve render path from pipeline configuration: {cfg}")
+
+    if collect_playblasts:
+        return collect_playblasts(
+            render_path=r_path,
+            destination_dir=destination_dir,
+            shots=shots,
+            department=department,
+            file_format=file_format,
+            config_path=cfg,
+            episode=episode,
+            sequence=sequence,
+        )
+    raise ImportError("playblast_collector module is not available.")
 
 
 # ==============================================================================

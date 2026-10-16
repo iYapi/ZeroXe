@@ -6,6 +6,10 @@ global:
         linux: "/mnt/I/20260222_melangkah_dari_timur/"
         windows: "I:/20260222_melangkah_dari_timur/"
         darwin: "/Volumes/I/20260222_melangkah_dari_timur/"
+    renders:
+        linux: "/mnt/K/20260222_melangkah_dari_timur/"
+        windows: "K:/20260222_melangkah_dari_timur/"
+        darwin: "/Volumes/K/20260222_melangkah_dari_timur/"
 
 departments:
     2D:

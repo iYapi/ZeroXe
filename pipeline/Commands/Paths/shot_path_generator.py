@@ -95,6 +95,22 @@ class ShotPathGenerator:
             return mounts.get("darwin", "")
         return mounts.get("linux", "")
 
+    def get_render_path(self, platform_name: Optional[str] = None) -> str:
+        """Resolve render root path for current OS platform from pipeline.yaml."""
+        global_cfg = self.config.get("global", {})
+        renders = global_cfg.get("renders", {}) or self.config.get("renders", {})
+
+        if platform_name:
+            return renders.get(platform_name, "")
+
+        if sys.platform.startswith("linux"):
+            return renders.get("linux", "")
+        elif sys.platform.startswith("win32"):
+            return renders.get("windows", "")
+        elif sys.platform.startswith("darwin"):
+            return renders.get("darwin", "")
+        return renders.get("linux", "")
+
     def get_project_code(self) -> str:
         """Retrieve project code (e.g. 'mdt')."""
         global_cfg = self.config.get("global", {})

@@ -194,7 +194,8 @@ def test_dynamic_feature_discovery_and_execution(tmp_path):
     assert "Sync" in features
     assert "Up Version" in features
     assert "Up Master" in features
-    assert len(features) == 4
+    assert "Playblast Collect" in features
+    assert len(features) == 5
 
     # 2. Unconfigured project has NO features
     unconfigured_features = PipelineService.list_features(department="Animation", project_name="UnconfiguredProject")

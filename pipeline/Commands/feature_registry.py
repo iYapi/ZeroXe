@@ -26,6 +26,43 @@ except ImportError:
         except ImportError:
             from .versioning import VersioningSystem
 
+try:
+    from Additional import (
+        AdditionalFactory,
+        AdditionalFeatureResult,
+        PlayblastCollector,
+        collect_playblasts,
+        PlayblastCollectDialog,
+        PlayblastResultDialog,
+    )
+except ImportError:
+    try:
+        from Commands.Additional import (
+            AdditionalFactory,
+            AdditionalFeatureResult,
+            PlayblastCollector,
+            collect_playblasts,
+            PlayblastCollectDialog,
+            PlayblastResultDialog,
+        )
+    except ImportError:
+        try:
+            from pipeline.Commands.Additional import (
+                AdditionalFactory,
+                AdditionalFeatureResult,
+                PlayblastCollector,
+                collect_playblasts,
+                PlayblastCollectDialog,
+                PlayblastResultDialog,
+            )
+        except ImportError:
+            AdditionalFactory = None
+            AdditionalFeatureResult = None
+            PlayblastCollector = None
+            collect_playblasts = None
+            PlayblastCollectDialog = None
+            PlayblastResultDialog = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +86,8 @@ def register_feature(
     description: str = "",
     departments: Optional[List[str]] = None,
     order: int = 100,
+    requires_dcc: bool = True,
+    handles_batch: bool = False,
 ) -> Callable:
     """Decorator to register a pipeline feature dynamically.
 
@@ -57,6 +96,8 @@ def register_feature(
         description: Short description of the feature
         departments: List of allowed departments, or None for all departments
         order: Sort priority (lower numbers appear first)
+        requires_dcc: Whether execution requires DCC (e.g. Blender) executable
+        handles_batch: Whether this feature natively handles batch execution for multiple items
     """
 
     def decorator(fn: Callable) -> Callable:
@@ -66,10 +107,30 @@ def register_feature(
             "handler": fn,
             "departments": [d.lower() for d in departments] if departments else None,
             "order": order,
+            "requires_dcc": requires_dcc,
+            "handles_batch": handles_batch,
         }
         return fn
 
     return decorator
+
+
+def feature_requires_dcc(feature_name: str) -> bool:
+    """Return True if the feature requires DCC (e.g. Blender) execution."""
+    clean = (feature_name or "").strip().lower()
+    for name, info in _FEATURE_REGISTRY.items():
+        if name.strip().lower() == clean:
+            return bool(info.get("requires_dcc", True))
+    return True
+
+
+def feature_handles_batch(feature_name: str) -> bool:
+    """Return True if the feature natively handles batch execution for multiple items."""
+    clean = (feature_name or "").strip().lower()
+    for name, info in _FEATURE_REGISTRY.items():
+        if name.strip().lower() == clean:
+            return bool(info.get("handles_batch", False))
+    return False
 
 
 # ==============================================================================
@@ -335,6 +396,94 @@ def handle_up_master(
         )
     except Exception as e:
         return PipelineFeatureResult(success=False, message=f"Failed to generate Up Master: {e}")
+
+
+@register_feature(
+    name="Playblast Collect",
+    description="Scan render path recursively and collect latest playblasts for selected shots",
+    order=25,
+    requires_dcc=False,
+    handles_batch=True,
+)
+def handle_playblast_collect(
+    filepath: Optional[str] = None,
+    department: Optional[str] = None,
+    shot_data: Optional[Dict[str, Any]] = None,
+    config_path: Optional[Union[str, Path]] = None,
+    project_path: Optional[str] = None,
+    destination_dir: Optional[Union[str, Path]] = None,
+    render_path: Optional[Union[str, Path]] = None,
+    file_format: Optional[str] = None,
+    shots: Optional[List[Any]] = None,
+    **kwargs: Any,
+) -> PipelineFeatureResult:
+    """Handler for Playblast Collect feature dispatched via AdditionalFactory."""
+    # 1. Resolve shots
+    shot_list = shots or []
+    if not shot_list and shot_data:
+        s_name = shot_data.get("name") or shot_data.get("shot")
+        if s_name:
+            shot_list = [s_name]
+    elif not shot_list and filepath:
+        shot_list = [Path(filepath).stem]
+
+    if not shot_list:
+        return PipelineFeatureResult(
+            success=False,
+            message="No shots specified for playblast collection.",
+        )
+
+    # 2. Execute via AdditionalFactory if available
+    if AdditionalFactory is not None:
+        try:
+            res = AdditionalFactory.collect_playblasts(
+                shots=shot_list,
+                department=department,
+                destination_dir=destination_dir,
+                render_path=render_path,
+                file_format=file_format,
+                config_path=config_path,
+                **kwargs,
+            )
+            return PipelineFeatureResult(
+                success=res.success,
+                message=res.message,
+                target_path=res.target_path,
+                data=res.data,
+            )
+        except Exception as e:
+            return PipelineFeatureResult(
+                success=False,
+                message=f"Failed to execute Playblast Collect via AdditionalFactory: {e}",
+            )
+
+    if not collect_playblasts or not PlayblastCollector:
+        return PipelineFeatureResult(
+            success=False,
+            message="Playblast collector module is not available in pipeline.",
+        )
+
+    # Fallback direct execution
+    r_path = render_path or kwargs.get("render_path") or PlayblastCollector.get_render_path(config_path=config_path)
+    fmt = file_format or kwargs.get("format") or kwargs.get("file_format") or ".mov"
+    dest = destination_dir or kwargs.get("target_dir") or kwargs.get("destination_dir")
+    if not r_path or not dest:
+        return PipelineFeatureResult(success=False, message="Missing render path or destination directory.")
+
+    res = collect_playblasts(
+        render_path=r_path,
+        destination_dir=dest,
+        shots=shot_list,
+        department=department or "Layout",
+        file_format=fmt,
+        config_path=config_path,
+    )
+    return PipelineFeatureResult(
+        success=res.success,
+        message=res.message,
+        target_path=str(res.destination_dir),
+        data={"action": "playblast_collect", "copied_count": len(res.copied_files)},
+    )
 
 
 # ==============================================================================

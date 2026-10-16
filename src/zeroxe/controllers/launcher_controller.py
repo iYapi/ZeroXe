@@ -1094,18 +1094,6 @@ class LauncherController(QObject):
             )
             return
 
-        active_blender = SettingsService.get_active_blender()
-        if not active_blender or not Path(active_blender).is_file():
-            QMessageBox.warning(
-                self.view,
-                "Blender Not Configured",
-                "Blender executable path is missing or invalid. Please configure it in Settings -> Software.",
-            )
-            return
-
-        proj_name = self.current_project.name if self.current_project else None
-        dept_name = self.current_department.name if self.current_department else ""
-
         # Check multi-select mode and gather selected items from list
         multi_cb = getattr(self.view.ui, "checkBox_multiSelect", getattr(self.view.ui, "comboBox_multiSelect", None))
         is_multi = multi_cb.isChecked() if multi_cb else False
@@ -1118,6 +1106,19 @@ class LauncherController(QObject):
             if item_data and item_data not in selected_items:
                 selected_items.append(item_data)
 
+        proj_name = self.current_project.name if self.current_project else None
+        dept_name = self.current_department.name if self.current_department else ""
+
+        if PipelineService.feature_requires_dcc(action, project_name=proj_name):
+            active_blender = SettingsService.get_active_blender()
+            if not active_blender or not Path(active_blender).is_file():
+                QMessageBox.warning(
+                    self.view,
+                    "Blender Not Configured",
+                    "Blender executable path is missing or invalid. Please configure it in Settings -> Software.",
+                )
+                return
+
         if is_multi and not selected_items:
             QMessageBox.warning(
                 self.view,
@@ -1129,6 +1130,40 @@ class LauncherController(QObject):
         # ------------------------------------------------------------------
         # A. Batch Execution (Multiple items selected)
         # ------------------------------------------------------------------
+        # Check if the feature natively handles multi-item execution (e.g. Playblast Collect)
+        if is_multi and selected_items and PipelineService.feature_handles_batch(action, project_name=proj_name):
+            try:
+                success, msg, target_path = PipelineService.execute_feature(
+                    feature_name=action,
+                    filepath=self.selected_file_path or "",
+                    department=dept_name,
+                    project_name=proj_name,
+                    shots=selected_items,
+                    parent=self.view,
+                )
+                write_process_log(
+                    category="pipeline",
+                    process_name=f"pipeline_{action.lower().replace(' ', '_')}",
+                    content=f"Batch (native) Success: {success}\nTarget Path: {target_path}\nOutput / Message:\n{msg}",
+                    extra_meta={
+                        "Action": action,
+                        "Department": dept_name,
+                        "Total Items": len(selected_items),
+                    },
+                )
+                self.refresh_versions()
+                self.update_metadata_table()
+            except Exception as e:
+                show_error_dialog(
+                    parent=self.view,
+                    title=f"{action} Error",
+                    summary=f"An error occurred executing '{action}': {e}",
+                    full_log=str(e),
+                    prefix=f"zeroxe_{action.lower().replace(' ', '_')}",
+                    category="pipeline",
+                )
+            return
+
         if is_multi and len(selected_items) > 1:
             item_names = [getattr(it, "name", str(it)) for it in selected_items]
             preview_names = ", ".join(item_names[:5])
@@ -1423,7 +1458,8 @@ class LauncherController(QObject):
         # ------------------------------------------------------------------
         # B. Single Item Execution (Runs on main thread so GUI dialogs render safely)
         # ------------------------------------------------------------------
-        if not self.selected_file_path or self.current_version == "Pipeline Error":
+        req_dcc = PipelineService.feature_requires_dcc(action, project_name=proj_name)
+        if req_dcc and (not self.selected_file_path or self.current_version == "Pipeline Error"):
             QMessageBox.warning(
                 self.view,
                 "No File Selected",
@@ -1431,10 +1467,18 @@ class LauncherController(QObject):
             )
             return
 
+        if not req_dcc and not self.current_shot and not self.current_asset and not self.selected_file_path:
+            QMessageBox.warning(
+                self.view,
+                "No Item Selected",
+                "Please select a shot or asset to perform this pipeline action.",
+            )
+            return
+
         item_name = (
             self.current_shot.name
             if self.current_shot
-            else (self.current_asset.name if self.current_asset else Path(self.selected_file_path).name)
+            else (self.current_asset.name if self.current_asset else (Path(self.selected_file_path).name if self.selected_file_path else "Current Item"))
         )
 
         reply = QMessageBox.warning(
@@ -1499,24 +1543,26 @@ class LauncherController(QObject):
             }
 
         try:
+            shots_arg = [self.current_shot] if self.current_shot else None
             success, msg, target_path = PipelineService.execute_feature(
                 feature_name=action,
-                filepath=self.selected_file_path,
+                filepath=self.selected_file_path or "",
                 department=dept_name,
                 project_name=proj_name,
                 shot_data=shot_data_dict,
+                shots=shots_arg,
                 parent=self.view,
             )
 
             # Record dedicated process log
             write_process_log(
                 category="pipeline",
-                process_name=f"pipeline_{action.lower()}",
+                process_name=f"pipeline_{action.lower().replace(' ', '_')}",
                 content=f"Success: {success}\nTarget Path: {target_path}\nOutput / Message:\n{msg}",
                 extra_meta={
                     "Action": action,
                     "Department": dept_name,
-                    "File": self.selected_file_path,
+                    "File": self.selected_file_path or "",
                 },
             )
 
@@ -1525,8 +1571,8 @@ class LauncherController(QObject):
                 self.refresh_versions()
                 self.update_metadata_table()
 
-                # Record version in audit log if target path exists
-                if entity_key and target_path:
+                # Record version in audit log if target path exists and feature is DCC workfile
+                if entity_key and target_path and req_dcc and Path(target_path).is_file():
                     try:
                         if "generate" in action.lower():
                             # 1. Record v001 version
@@ -1830,6 +1876,7 @@ class LauncherController(QObject):
                     full_log=str(msg),
                     prefix="zeroxe_unlock_error",
                 )
+
 
 
 
