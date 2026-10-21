@@ -244,7 +244,47 @@ class LightingBuilder:
         if selected_fg is None and kwargs.get("setting_data") and "fg_assets" in kwargs["setting_data"]:
             selected_fg = kwargs["setting_data"]["fg_assets"]
 
-        # 3. Interactive UI dialog (for single interactive execution when not in batch/test)
+        # 3. Multiple / Batch Generate default: all assets in FG except set
+        is_batch = bool(
+            kwargs.get("is_batch")
+            or kwargs.get("batch")
+            or kwargs.get("batch_mode")
+            or kwargs.get("default_batch_fg")
+            or shot_data.get("is_batch")
+            or (kwargs.get("shots") and len(kwargs["shots"]) > 1)
+        )
+
+        if selected_fg is None and is_batch:
+            batch_fg = []
+            for a in shot_assets_content:
+                if not isinstance(a, dict):
+                    continue
+                a_name = a.get("name", "")
+                if not a_name:
+                    continue
+                a_type_id = a.get("entity_type_id")
+                cat_key = ""
+                if a_type_id in asset_type_map:
+                    cat_key = str(asset_type_map[a_type_id][0]).lower()
+                # Exclude sets and mastershots
+                if cat_key == "set" or a_name.startswith("s-") or a_name.startswith("ms_") or a_name.startswith("LIT_"):
+                    continue
+                if a_name not in batch_fg:
+                    batch_fg.append(a_name)
+
+            # Include non-set category prefixes (e.g. 'c-', 'p-', 'v-') so any
+            # animated characters, props, vehicles in ANM collections route to FG
+            for config in asset_types.values():
+                if isinstance(config, dict):
+                    c_code = str(config.get("code", "")).lower()
+                    c_prefix = config.get("prefix")
+                    if c_code not in ["ms", "set"] and not c_code.startswith("ms") and c_prefix:
+                        if c_prefix not in batch_fg:
+                            batch_fg.append(c_prefix)
+
+            selected_fg = batch_fg
+
+        # 4. Interactive UI dialog (for single interactive execution when not in batch/test)
         import os
         is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
@@ -273,7 +313,7 @@ class LightingBuilder:
                         f"Could not display LightingAssetDialog: {e}"
                     )
 
-        # 4. Headless fallback: by default all assets are placed in BG (fg_assets = [])
+        # 5. Headless / individual fallback: by default all assets are placed in BG (fg_assets = [])
         if selected_fg is None:
             selected_fg = []
 

@@ -277,7 +277,7 @@ class LightingBatchDialog(QDialog):
         layout.addWidget(header, 0)
 
         desc = QLabel(
-            "Choose Foreground (FG) asset mapping configuration for all selected shots (default: all in BG):"
+            "Choose Foreground (FG) asset mapping configuration for all selected shots (default: all assets in FG except Set):"
         )
         desc.setWordWrap(True)
         layout.addWidget(desc, 0)
@@ -292,7 +292,7 @@ class LightingBatchDialog(QDialog):
         grp_layout = QVBoxLayout(group)
         grp_layout.setSpacing(12)
 
-        self.rb_default = QRadioButton("Use Default Setup (All assets in BG)")
+        self.rb_default = QRadioButton("Use Default Setup (All assets in FG except Set)")
         self.rb_default.setChecked(True)
         grp_layout.addWidget(self.rb_default, 0)
 
@@ -360,9 +360,12 @@ class LightingBatchDialog(QDialog):
 
     def get_result(self) -> Dict[str, Any]:
         """Return parameters dictionary."""
+        res: Dict[str, Any] = {"is_batch": True}
         if self._chosen_yaml:
-            return {"fg_yaml": self._chosen_yaml}
-        return {}
+            res["fg_yaml"] = self._chosen_yaml
+        else:
+            res["default_batch_fg"] = True
+        return res
 
 
 if __name__ == "__main__":

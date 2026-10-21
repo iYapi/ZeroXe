@@ -1139,6 +1139,7 @@ class LauncherController(QObject):
                     department=dept_name,
                     project_name=proj_name,
                     shots=selected_items,
+                    is_batch=len(selected_items) > 1,
                     parent=self.view,
                 )
                 write_process_log(
@@ -1201,6 +1202,7 @@ class LauncherController(QObject):
                 return
 
             batch_kwargs["show_ui"] = False
+            batch_kwargs["is_batch"] = True
 
             def _run_batch_job(progress_callback=None, is_cancelled=None):
                 total = len(selected_items)

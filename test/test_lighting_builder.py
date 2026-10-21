@@ -158,6 +158,55 @@ def test_lighting_builder_extract_data_headless(tmp_path):
     assert "ensure_collection(\"bg\")" in script
 
 
+def test_lighting_builder_extract_data_batch_default_fg(tmp_path):
+    """Verify that in batch mode (is_batch=True), all assets are added to FG except set by default."""
+    builder = LightingBuilder()
+
+    mock_shot_data = {
+        "name": "SH001",
+        "sequence": "SQ01",
+        "assets": [
+            {"name": "c-hero", "entity_type_id": "3810b978"},
+            {"name": "c-villain", "entity_type_id": "3810b978"},
+            {"name": "s-forest", "entity_type_id": "44b7cabe"},
+        ],
+        "data": {"frame_in": 101, "frame_out": 150, "fps": 24, "resolution": "1920x1080"},
+    }
+    mock_asset_dept = {
+        "Asset": {
+            "asset_type": {
+                "CHAR": {"id": "3810b978", "code": "chr", "prefix": "c-", "base_path": "/assets/char"},
+                "SET": {"id": "44b7cabe", "code": "set", "prefix": "s-", "base_path": "/assets/set"},
+            }
+        }
+    }
+    mock_current_dept = {
+        "Lighting": {"code": "lgt", "presets": {}}
+    }
+    filepath_dict = {
+        "final": str(tmp_path / "SQ01_SH001_lgt.blend"),
+        "version": str(tmp_path / "progress" / "SQ01_SH001_lgt_v001.blend"),
+        "source": str(tmp_path / "SQ01_SH001_anm.blend"),
+    }
+
+    # In batch mode, all assets except sets default to FG
+    script = builder.extract_data(
+        shot_data=mock_shot_data,
+        current_department=mock_current_dept,
+        asset_department=mock_asset_dept,
+        mastershots_data={},
+        addons_data={},
+        filepath=filepath_dict,
+        show_ui=False,
+        is_batch=True,
+    )
+
+    # c-hero and c-villain and prefix c- should be in fg_assets, but s-forest must NOT be in fg_assets
+    assert "c-hero" in script
+    assert "c-villain" in script
+    assert "s-forest" not in script.split("fg_assets = ")[1].split("\n")[0]
+
+
 def test_lighting_builder_extract_data_with_dialog(monkeypatch, tmp_path, qapp):
     """Verify extract_data connects with LightingAssetDialog and retrieves user FG selection."""
     builder = LightingBuilder()
