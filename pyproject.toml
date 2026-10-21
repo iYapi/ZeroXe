@@ -12,6 +12,7 @@ dependencies = [
     "gazu>=1.2.2",
     "packaging>=26.3",
     "pyside6>=6.11.2",
+    "python-ffmpeg>=2.0.12",
     "pyyaml>=6.0.2",
     "requests>=2.34.2",
 ]

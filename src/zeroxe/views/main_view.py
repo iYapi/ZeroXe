@@ -20,6 +20,7 @@ from zeroxe import config
 from zeroxe.api.update_api import UpdateAPI
 from zeroxe.services.notification_service import NotificationService
 from zeroxe.utils.icon_util import get_app_icon
+from zeroxe.views.converter_view import ConverterView
 from zeroxe.views.launcher_view import LauncherView
 from zeroxe.views.logs_view import LogsView
 from zeroxe.views.notification_view import NotificationView
@@ -84,24 +85,32 @@ class MainView(QMainWindow):
         NotificationService.start_kitsu_listener()
 
     def closeEvent(self, event):
+        if hasattr(self, "converter_view"):
+            self.converter_view.closeEvent(event)
         NotificationService.shutdown()
         super().closeEvent(event)
 
     def _setup_ui(self):
         self.tab_widget = QTabWidget(self)
         self.launcher_view = LauncherView(self)
+        self.converter_view = ConverterView(self)
         self.notification_view = NotificationView(self)
         self.logs_view = LogsView(self)
         self.tab_widget.addTab(self.launcher_view, "Launcher")
+        self.tab_widget.addTab(self.converter_view, "Converter")
         self.tab_widget.addTab(self.notification_view, "Notification")
         self.tab_widget.addTab(self.logs_view, "Logs")
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         self.setCentralWidget(self.tab_widget)
 
     def _on_tab_changed(self, index: int):
+        current_widget = self.tab_widget.widget(index)
         # Auto-refresh log list when switching to Logs tab
-        if self.tab_widget.widget(index) == self.logs_view:
+        if current_widget == self.logs_view:
             self.logs_view.refresh_log_list()
+        # Auto-refresh pipeline presets when switching to Converter tab
+        elif current_widget == self.converter_view:
+            self.converter_view.refresh_presets()
 
     def _create_menu_bar(self):
         menubar = self.menuBar()

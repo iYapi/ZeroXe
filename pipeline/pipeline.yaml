@@ -149,3 +149,19 @@ library:
         prefix: "lib-"
         suffix: ""
         base_path: "@project_path@/02_production/04_animation/00_anim_library/"
+
+converter:
+    presets_dir: "@pipeline_path@/Presets/Converter/"
+    presets:
+        folder_to_mp4:
+            name: "Folder (Image Sequence) to MP4"
+            type: "folder"
+            script: "@pipeline_path@/Presets/Converter/folder_to_mp4.py"
+        video_to_mp4:
+            name: "Video to MP4"
+            type: "video"
+            script: "@pipeline_path@/Presets/Converter/video_to_mp4.py"
+        img_to_mp4:
+            name: "Image Sequence (Pattern) to MP4"
+            type: "sequence"
+            script: "@pipeline_path@/Presets/Converter/img_to_mp4.py"

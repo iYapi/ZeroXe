@@ -206,6 +206,33 @@ class PipelineService:
         return None
 
     @classmethod
+    def get_active_pipeline_dir(cls, project_name: Optional[str] = None) -> Optional[Path]:
+        """Resolve root directory of active pipeline on NAS or local repo fallback."""
+        pipe_yaml = cls.get_active_pipeline_yaml_path(project_name=project_name)
+        if pipe_yaml and pipe_yaml.is_file():
+            return pipe_yaml.parent
+        local_dir = Path(__file__).resolve().parents[3] / "pipeline"
+        if local_dir.is_dir():
+            return local_dir
+        return None
+
+    @classmethod
+    def get_converter_presets_dir(cls, project_name: Optional[str] = None) -> Optional[Path]:
+        """Locate directory containing converter presets in active pipeline or local fallback."""
+        pipe_dir = cls.get_active_pipeline_dir(project_name=project_name)
+        if pipe_dir:
+            cand = pipe_dir / "Presets" / "Converter"
+            if cand.is_dir():
+                return cand
+            cand2 = pipe_dir / "Converter"
+            if cand2.is_dir():
+                return cand2
+        local_cand = Path(__file__).resolve().parents[3] / "pipeline" / "Presets" / "Converter"
+        if local_cand.is_dir():
+            return local_cand
+        return None
+
+    @classmethod
     def get_pipeline_entrypoint(cls, project_name: Optional[str] = None) -> Optional[Path]:
         """Locate Commands/main.py corresponding to active pipeline on NAS with caching."""
         cls._validate_cache_freshness()
