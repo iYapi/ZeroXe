@@ -708,7 +708,12 @@ def link_animation():
 			continue
 		to_link.extend(names)
 
-	to_link = [n for n in to_link if n not in bpy.data.collections]
+	anim_abs = bpy.path.abspath(anim_file)
+	existing_anim_colls = {
+		c.name for c in bpy.data.collections
+		if c.library and bpy.path.abspath(c.library.filepath) == anim_abs
+	}
+	to_link = [n for n in to_link if n not in existing_anim_colls]
 	if to_link:
 		with bpy.data.libraries.load(anim_file, link=True) as (data_from, data_to):
 			data_to.collections = [n for n in to_link if n in data_from.collections]
@@ -727,11 +732,12 @@ def link_animation():
 		bg_cat_parent = cat_parents.get(bg_cat_name)
 
 		for cname in child_names:
-			col = bpy.data.collections.get(cname)
+			# Prioritize collection specifically linked from anim_file
+			col = next((c for c in bpy.data.collections
+						if c.name == cname and c.library and
+						bpy.path.abspath(c.library.filepath) == anim_abs), None)
 			if not col:
-				col = next((c for c in bpy.data.collections
-							if c.name == cname and c.library and
-							bpy.path.abspath(c.library.filepath) == bpy.path.abspath(anim_file)), None)
+				col = bpy.data.collections.get(cname)
 			if not col:
 				print(f"[WARNING] Expected linked collection missing: {cname}")
 				continue
@@ -745,10 +751,14 @@ def link_animation():
 				target_parent = bg_cat_parent
 				target_label = bg_cat_name
 
-			if target_parent and col.name not in target_parent.children:
-				target_parent.children.link(col)
+			if target_parent:
+				if col not in list(target_parent.children):
+					existing_child = target_parent.children.get(col.name)
+					if existing_child and existing_child != col:
+						target_parent.children.unlink(existing_child)
+					target_parent.children.link(col)
 				# Unlink from scene root collection if directly attached
-				if col.name in bpy.context.scene.collection.children:
+				if col in list(bpy.context.scene.collection.children):
 					bpy.context.scene.collection.children.unlink(col)
 				print(f"Linked '{cname}' under '{target_label}'")
 
