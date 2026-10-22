@@ -176,6 +176,50 @@ def test_ffmpeg_folder_and_video_conversion(tmp_path):
     assert out_video_mp4.stat().st_size > 0
 
 
+def test_converter_writes_process_logs(tmp_path):
+    """Verify that using ConverterService writes structured logs to the 'converter' category in ZeroXe's log system."""
+    from zeroxe.utils.log_util import get_category_logs_dir, list_process_logs, read_process_log
+
+    cat_dir = get_category_logs_dir("converter")
+    assert cat_dir.exists()
+    assert cat_dir.name == "converter"
+
+    # Create dummy images
+    seq_dir = tmp_path / "log_seq"
+    seq_dir.mkdir()
+    (seq_dir / "img_0001.ppm").write_bytes(b"P6\n2 2\n255\n" + (b"\xff\x00\x00" * 4))
+    out_mp4 = tmp_path / "log_test.mp4"
+
+    # Count existing logs before conversion
+    initial_logs = list_process_logs("converter")
+    initial_count = len(initial_logs)
+
+    success, msg = ConverterService.execute_preset(
+        preset="folder_to_mp4",
+        input_path=str(seq_dir),
+        output_file=str(out_mp4),
+        framerate=24,
+        quality=15,
+        write_log=True,
+    )
+    assert success is True
+
+    # Check that a new process log was recorded
+    after_logs = list_process_logs("converter")
+    assert len(after_logs) > initial_count
+
+    latest_log = after_logs[0]
+    assert latest_log["category"] == "converter"
+    assert "folder_to_mp4" in latest_log["name"]
+
+    content = read_process_log(latest_log["path"])
+    assert "ZeroXe Process Log" in content
+    assert "Category    : Media Converter" in content
+    assert "Preset ID           : folder_to_mp4" in content
+    assert "Status              : SUCCESS" in content
+    assert str(out_mp4) in content
+
+
 def test_converter_view_and_controller(qapp, tmp_path):
     """Verify ConverterView UI elements, 7-column model, version suffix, and master output path."""
     view = ConverterView()

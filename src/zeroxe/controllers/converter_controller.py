@@ -4,10 +4,12 @@ Coordinates the Converter View, background conversion worker thread,
 and dynamic pipeline preset service.
 """
 
+import datetime
 import logging
 import os
 import subprocess
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +19,7 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMenu, QMess
 
 from zeroxe.services.converter_service import ConverterPreset, ConverterService
 from zeroxe.services.notification_service import NotificationService
-from zeroxe.utils.log_util import open_file_in_system
+from zeroxe.utils.log_util import get_category_logs_dir, open_file_in_system, write_process_log
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +62,11 @@ class ConverterWorker(QThread):
         self._is_cancelled = True
 
     def run(self) -> None:
+        start_time = datetime.datetime.now()
         total = len(self.items)
         successful = 0
         failed = 0
+        item_log_entries: list[str] = []
 
         logger.info(f"Starting batch conversion of {total} item(s) using preset '{self.preset.name}'...")
 
@@ -74,6 +78,8 @@ class ConverterWorker(QThread):
             name = item.get("name", f"Item #{idx + 1}")
             source_path = item.get("source_path", "")
             output_path = item.get("output_path", "")
+            item_start = datetime.datetime.now()
+            progress_history: list[str] = []
 
             self.item_started.emit(idx, name)
 
@@ -87,6 +93,7 @@ class ConverterWorker(QThread):
                         p_text = str(prog.get("status", "Converting..."))
                     else:
                         p_text = str(prog)
+                    progress_history.append(p_text)
                     self.item_progress.emit(item_idx, p_text)
                 return progress_cb
 
@@ -98,19 +105,74 @@ class ConverterWorker(QThread):
                     framerate=self.framerate,
                     quality=self.quality,
                     progress_callback=make_progress_cb(idx),
+                    write_log=False,  # ConverterWorker writes consolidated session log below
                 )
             except Exception as ex:
                 success = False
                 msg = str(ex)
 
+            item_elapsed = (datetime.datetime.now() - item_start).total_seconds()
+
             if success:
                 successful += 1
-                logger.info(f"✓ Converted '{name}' -> {output_path}")
+                logger.info(f"✓ Converted '{name}' -> {output_path} ({item_elapsed:.2f}s)")
             else:
                 failed += 1
-                logger.error(f"✗ Failed '{name}': {msg}")
+                logger.error(f"✗ Failed '{name}': {msg} ({item_elapsed:.2f}s)")
+
+            last_prog = progress_history[-1] if progress_history else "Completed"
+            item_entry = (
+                f"[{idx + 1}/{total}] {name}\n"
+                f"  Status   : {'SUCCESS' if success else 'FAILED'}\n"
+                f"  Source   : {source_path}\n"
+                f"  Output   : {output_path}\n"
+                f"  Duration : {item_elapsed:.2f}s\n"
+                f"  Progress : {last_prog}\n"
+                f"  Result   : {msg}"
+            )
+            item_log_entries.append(item_entry)
 
             self.item_finished.emit(idx, success, msg)
+
+        total_elapsed = (datetime.datetime.now() - start_time).total_seconds()
+        status_str = "Cancelled" if self._is_cancelled else ("Completed" if failed == 0 else "Finished with errors")
+
+        # Write comprehensive session log to the ZeroXe logs system
+        try:
+            summary_header = (
+                f"Preset Name  : {self.preset.name}\n"
+                f"Preset ID    : {self.preset.id}\n"
+                f"Input Type   : {self.preset.input_type}\n"
+                f"Framerate    : {self.framerate} fps\n"
+                f"Quality      : {self.quality} (qscale)\n"
+                f"Total Items  : {total}\n"
+                f"Successful   : {successful}\n"
+                f"Failed       : {failed}\n"
+                f"Status       : {status_str}\n"
+                f"Total Time   : {total_elapsed:.2f} seconds\n\n"
+                f"{'=' * 70}\n"
+                f"Item Conversion Details:\n"
+                f"{'=' * 70}\n" +
+                "\n\n".join(item_log_entries)
+            )
+
+            proc_name = f"converter_{self.preset.id}" if total == 1 else f"converter_batch_{self.preset.id}"
+            log_file = write_process_log(
+                category="converter",
+                process_name=proc_name,
+                content=summary_header,
+                extra_meta={
+                    "Preset": self.preset.name,
+                    "Total": total,
+                    "Successful": successful,
+                    "Failed": failed,
+                    "Status": status_str,
+                    "Duration": f"{total_elapsed:.2f}s",
+                },
+            )
+            logger.info(f"Converter process log written to: {log_file}")
+        except Exception as e:
+            logger.error(f"Failed to write converter process log: {e}")
 
         self.all_finished.emit(total, successful, failed)
 
@@ -570,8 +632,9 @@ class ConverterController(QObject):
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                 tmp_path = tmp.name
 
+            ffmpeg_bin = ConverterService.get_ffmpeg_executable()
             cmd = [
-                "ffmpeg", "-y", "-ss", "00:00:00.500", "-i", str(file_path),
+                ffmpeg_bin, "-y", "-ss", "00:00:00.500", "-i", str(file_path),
                 "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "3", tmp_path,
             ]
             res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
@@ -655,7 +718,20 @@ class ConverterController(QObject):
         act_clear = menu.addAction("Clear All")
         act_clear.triggered.connect(self.clear_all_items)
 
+        menu.addSeparator()
+        act_view_logs = menu.addAction("View Converter Logs...")
+        act_view_logs.triggered.connect(self._open_logs_view)
+
         menu.exec(self.ui.tableView_available.viewport().mapToGlobal(pos))
+
+    def _open_logs_view(self) -> None:
+        """Switch to Logs tab or open logs folder."""
+        main_win = self.view.window()
+        if hasattr(main_win, "tab_widget") and hasattr(main_win, "logs_view"):
+            main_win.tab_widget.setCurrentWidget(main_win.logs_view)
+            main_win.logs_view.refresh_log_list()
+        else:
+            open_file_in_system(get_category_logs_dir("converter"))
 
     # ------------------------------------------------------------------
     # Conversion Execution

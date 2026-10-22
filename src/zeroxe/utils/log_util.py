@@ -34,6 +34,7 @@ PROCESS_CATEGORIES = {
     "pipeline": "Pipeline Presets",
     "batch": "Batch Operations",
     "kitsu": "Kitsu Synchronization",
+    "converter": "Media Converter",
 }
 
 
@@ -63,6 +64,10 @@ def create_process_log_file(category: str, process_name: str) -> Path:
     safe_name = re.sub(r"[^\w\-]", "_", process_name).strip("_") or "process"
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = cat_dir / f"{safe_name}_{timestamp}.log"
+    counter = 1
+    while log_file.exists():
+        log_file = cat_dir / f"{safe_name}_{timestamp}_{counter}.log"
+        counter += 1
     return log_file
 
 

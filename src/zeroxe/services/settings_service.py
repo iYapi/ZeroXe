@@ -77,6 +77,17 @@ class SettingsService:
         cls._settings().setValue("software/dcc_timeout", int(timeout))
         cls._settings().sync()
 
+    @classmethod
+    def get_ffmpeg_path(cls) -> str:
+        """Return user-configured FFmpeg executable path."""
+        return cls._settings().value("software/ffmpeg_path", "", type=str)
+
+    @classmethod
+    def set_ffmpeg_path(cls, path: str) -> None:
+        """Persist user-configured FFmpeg executable path."""
+        cls._settings().setValue("software/ffmpeg_path", str(path))
+        cls._settings().sync()
+
     # ------------------------------------------------------------------
     # NAS Configuration
     # ------------------------------------------------------------------

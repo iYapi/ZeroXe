@@ -22,12 +22,85 @@ OUTPUT_EXTENSION = ".mp4"
 DESCRIPTION = "Convert all images in a folder (jpg, png, exr, tif, dpx, bmp) to MP4 via concat demuxer"
 
 
+def _ensure_in_path(bin_dir: Path) -> None:
+    """Ensure directory containing ffmpeg binary is present in os.environ['PATH']."""
+    try:
+        dir_str = str(bin_dir.resolve())
+        curr_path = os.environ.get("PATH", "")
+        parts = curr_path.split(os.pathsep) if curr_path else []
+        if dir_str not in parts:
+            os.environ["PATH"] = f"{dir_str}{os.pathsep}{curr_path}" if curr_path else dir_str
+    except Exception:
+        pass
+
+
+def _resolve_ffmpeg_executable(custom_path: str | None = None) -> str:
+    """Resolve FFmpeg executable robustly across environments."""
+    def _is_executable(p_str: str | Path | None) -> str | None:
+        if not p_str:
+            return None
+        p = Path(p_str)
+        try:
+            if p.is_file() and os.access(p, os.X_OK):
+                _ensure_in_path(p.parent)
+                return str(p.resolve())
+        except OSError:
+            pass
+        return None
+
+    # 1. Explicitly provided path
+    res = _is_executable(custom_path)
+    if res:
+        return res
+
+    # 2. Try SettingsService if available
+    try:
+        from zeroxe.services.settings_service import SettingsService
+        res = _is_executable(SettingsService.get_ffmpeg_path())
+        if res:
+            return res
+    except Exception:
+        pass
+
+    # 3. Environment variables
+    for var in ("FFMPEG_BINARY", "FFMPEG_PATH"):
+        res = _is_executable(os.environ.get(var, "").strip())
+        if res:
+            return res
+
+    # 4. PATH search via shutil.which
+    import shutil
+    res = _is_executable(shutil.which("ffmpeg"))
+    if res:
+        return res
+
+    # 5. Standard candidate locations
+    candidates = [
+        "/usr/bin/ffmpeg",
+        "/usr/sbin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/local/sbin/ffmpeg",
+        "/bin/ffmpeg",
+        "/opt/homebrew/bin/ffmpeg",
+        "/opt/local/bin/ffmpeg",
+        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+    ]
+    for c in candidates:
+        res = _is_executable(c)
+        if res:
+            return res
+
+    return "ffmpeg"
+
+
 async def execute(
     input_path: str,
     output_file: str,
     framerate: int = DEFAULT_FRAMERATE,
     quality: int = DEFAULT_QUALITY,
     progress_callback: Callable | None = None,
+    ffmpeg_executable: str | None = None,
     **kwargs,
 ) -> bool:
     """Convert all images in a folder to MP4 using concat demuxer.
@@ -38,6 +111,7 @@ async def execute(
         framerate: Frame rate for output video (default: 24)
         quality: Quality level 1-31, where 1 is best (default: 15)
         progress_callback: Optional callable for progress updates
+        ffmpeg_executable: Optional explicit path to ffmpeg binary
 
     Returns:
         True if successful, False otherwise
@@ -62,8 +136,10 @@ async def execute(
             logger.error(f"No image files found in {input_path}")
             return False
 
+        ffmpeg_bin = _resolve_ffmpeg_executable(ffmpeg_executable or kwargs.get("ffmpeg_executable"))
+
         logger.info(
-            f"Executing FFmpeg to convert {len(image_files)} images from {input_path} to {output_file}...\n"
+            f"Executing FFmpeg ({ffmpeg_bin}) to convert {len(image_files)} images from {input_path} to {output_file}...\n"
             f"  First image: {image_files[0].name}\n"
             f"  Last image: {image_files[-1].name}\n"
             f"  Framerate: {framerate} fps\n"
@@ -83,7 +159,7 @@ async def execute(
 
             # Build FFmpeg command using concat demuxer
             ffmpeg = (
-                FFmpeg()
+                FFmpeg(executable=ffmpeg_bin)
                 .option("y")  # overwrite output
                 .option("f", "concat")
                 .option("safe", "0")

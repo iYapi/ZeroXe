@@ -5,6 +5,7 @@ Editable dynamically in the pipeline without recompiling ZeroXe application.
 """
 
 import logging
+import os
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -21,6 +22,78 @@ OUTPUT_EXTENSION = ".mp4"
 DESCRIPTION = "Convert an image sequence pattern (e.g. shot_%04d.png) to MP4"
 
 
+def _ensure_in_path(bin_dir: Path) -> None:
+    """Ensure directory containing ffmpeg binary is present in os.environ['PATH']."""
+    try:
+        dir_str = str(bin_dir.resolve())
+        curr_path = os.environ.get("PATH", "")
+        parts = curr_path.split(os.pathsep) if curr_path else []
+        if dir_str not in parts:
+            os.environ["PATH"] = f"{dir_str}{os.pathsep}{curr_path}" if curr_path else dir_str
+    except Exception:
+        pass
+
+
+def _resolve_ffmpeg_executable(custom_path: str | None = None) -> str:
+    """Resolve FFmpeg executable robustly across environments."""
+    def _is_executable(p_str: str | Path | None) -> str | None:
+        if not p_str:
+            return None
+        p = Path(p_str)
+        try:
+            if p.is_file() and os.access(p, os.X_OK):
+                _ensure_in_path(p.parent)
+                return str(p.resolve())
+        except OSError:
+            pass
+        return None
+
+    # 1. Explicitly provided path
+    res = _is_executable(custom_path)
+    if res:
+        return res
+
+    # 2. Try SettingsService if available
+    try:
+        from zeroxe.services.settings_service import SettingsService
+        res = _is_executable(SettingsService.get_ffmpeg_path())
+        if res:
+            return res
+    except Exception:
+        pass
+
+    # 3. Environment variables
+    for var in ("FFMPEG_BINARY", "FFMPEG_PATH"):
+        res = _is_executable(os.environ.get(var, "").strip())
+        if res:
+            return res
+
+    # 4. PATH search via shutil.which
+    import shutil
+    res = _is_executable(shutil.which("ffmpeg"))
+    if res:
+        return res
+
+    # 5. Standard candidate locations
+    candidates = [
+        "/usr/bin/ffmpeg",
+        "/usr/sbin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/local/sbin/ffmpeg",
+        "/bin/ffmpeg",
+        "/opt/homebrew/bin/ffmpeg",
+        "/opt/local/bin/ffmpeg",
+        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+    ]
+    for c in candidates:
+        res = _is_executable(c)
+        if res:
+            return res
+
+    return "ffmpeg"
+
+
 async def execute(
     input_path: str,
     output_file: str,
@@ -28,6 +101,7 @@ async def execute(
     quality: int = DEFAULT_QUALITY,
     start_frame: int = 101,
     progress_callback: Callable | None = None,
+    ffmpeg_executable: str | None = None,
     **kwargs,
 ) -> bool:
     """Convert an image sequence pattern to MP4.
@@ -39,6 +113,7 @@ async def execute(
         quality: Quality level 1-31 (default 15)
         start_frame: Start frame number (default 101)
         progress_callback: Optional callback for progress
+        ffmpeg_executable: Optional explicit path to ffmpeg binary
 
     Returns:
         True if successful, False otherwise
@@ -47,10 +122,12 @@ async def execute(
         out_path = Path(output_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Executing FFmpeg to convert {input_path} to {output_file}...")
+        ffmpeg_bin = _resolve_ffmpeg_executable(ffmpeg_executable or kwargs.get("ffmpeg_executable"))
+
+        logger.info(f"Executing FFmpeg ({ffmpeg_bin}) to convert {input_path} to {output_file}...")
 
         ffmpeg = (
-            FFmpeg()
+            FFmpeg(executable=ffmpeg_bin)
             .option("y")  # overwrite output
             .input(
                 str(input_path),

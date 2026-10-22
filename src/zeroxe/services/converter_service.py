@@ -5,10 +5,13 @@ without requiring the application to be recompiled.
 """
 
 import asyncio
+import datetime
 import importlib.util
 import inspect
 import logging
+import os
 import re
+import shutil
 import sys
 import traceback
 from collections.abc import Callable
@@ -17,6 +20,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from zeroxe.services.pipeline_service import PipelineService
+from zeroxe.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,87 @@ class ConverterService:
         """Clear all in-memory preset caches to force fresh reload."""
         cls._cached_presets.clear()
         cls._cached_mtimes.clear()
+
+    @classmethod
+    def get_ffmpeg_executable(cls) -> str:
+        """Find the path to the ffmpeg executable across multiple environments.
+
+        Order of resolution:
+        1. SettingsService.get_ffmpeg_path() if configured and valid
+        2. Environment variables FFMPEG_BINARY or FFMPEG_PATH
+        3. shutil.which("ffmpeg")
+        4. Standard system binary locations:
+           - Linux/Unix: /usr/bin/ffmpeg, /usr/sbin/ffmpeg, /usr/local/bin/ffmpeg, /usr/local/sbin/ffmpeg, /bin/ffmpeg
+           - macOS: /opt/homebrew/bin/ffmpeg, /opt/local/bin/ffmpeg
+           - Windows: C:\\ffmpeg\\bin\\ffmpeg.exe, C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe
+        5. Fallback to "ffmpeg"
+
+        Also prepends the executable's directory to os.environ["PATH"] if missing.
+        """
+        def _try_candidate(candidate_path: str | Path | None) -> str | None:
+            if not candidate_path:
+                return None
+            p = Path(candidate_path)
+            try:
+                if p.is_file() and os.access(p, os.X_OK):
+                    cls._ensure_path_env(p.parent)
+                    return str(p.resolve())
+            except OSError:
+                pass
+            return None
+
+        # 1. Configured path in Settings
+        try:
+            configured = SettingsService.get_ffmpeg_path()
+            cand = _try_candidate(configured)
+            if cand:
+                return cand
+        except Exception:
+            pass
+
+        # 2. Environment variables
+        for var in ("FFMPEG_BINARY", "FFMPEG_PATH"):
+            cand = _try_candidate(os.environ.get(var, "").strip())
+            if cand:
+                return cand
+
+        # 3. PATH search via shutil.which
+        which_path = shutil.which("ffmpeg")
+        if which_path:
+            cand = _try_candidate(which_path)
+            if cand:
+                return cand
+
+        # 4. Standard candidate locations
+        system_candidates = [
+            "/usr/bin/ffmpeg",
+            "/usr/sbin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/local/sbin/ffmpeg",
+            "/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg",
+            "/opt/local/bin/ffmpeg",
+            "C:\\ffmpeg\\bin\\ffmpeg.exe",
+            "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+        ]
+        for item in system_candidates:
+            cand = _try_candidate(item)
+            if cand:
+                return cand
+
+        return "ffmpeg"
+
+    @classmethod
+    def _ensure_path_env(cls, bin_dir: Path) -> None:
+        """Ensure the directory containing ffmpeg binary is present in os.environ['PATH']."""
+        try:
+            dir_str = str(bin_dir.resolve())
+            curr_path = os.environ.get("PATH", "")
+            parts = curr_path.split(os.pathsep) if curr_path else []
+            if dir_str not in parts:
+                os.environ["PATH"] = f"{dir_str}{os.pathsep}{curr_path}" if curr_path else dir_str
+        except Exception:
+            pass
 
     @classmethod
     def get_preset_directories(cls, project_name: str | None = None) -> list[Path]:
@@ -211,11 +296,12 @@ class ConverterService:
             if not image_files:
                 return False
             concat_file = folder / "ffmpeg_files.txt"
+            ffmpeg_bin = cls.get_ffmpeg_executable()
             try:
                 with open(concat_file, 'w', encoding='utf-8') as f:
                     f.writelines(f"file '{img.name}'\n" for img in image_files)
                 ffmpeg = (
-                    FFmpeg()
+                    FFmpeg(executable=ffmpeg_bin)
                     .option("y")
                     .option("f", "concat")
                     .option("safe", "0")
@@ -240,8 +326,9 @@ class ConverterService:
 
         async def fallback_video_to_mp4(input_path: str, output_file: str, framerate: int = 24, quality: int = 15, **kwargs) -> bool:
             from ffmpeg.asyncio import FFmpeg
+            ffmpeg_bin = cls.get_ffmpeg_executable()
             ffmpeg = (
-                FFmpeg()
+                FFmpeg(executable=ffmpeg_bin)
                 .option("y")
                 .input(input_path)
                 .output(
@@ -301,10 +388,19 @@ class ConverterService:
         if not p_obj or not callable(p_obj.handler):
             return False, f"Preset '{getattr(p_obj, 'name', 'Unknown')}' does not have a valid handler."
 
+        start_time = datetime.datetime.now()
+        success = False
+        msg = ""
+        error_trace = ""
+
         try:
             # Ensure output directory exists
             out_p = Path(output_file)
             out_p.parent.mkdir(parents=True, exist_ok=True)
+
+            # Auto-resolve ffmpeg executable for all handlers if not explicitly specified
+            if "ffmpeg_executable" not in kwargs:
+                kwargs["ffmpeg_executable"] = cls.get_ffmpeg_executable()
 
             handler = p_obj.handler
 
@@ -326,7 +422,9 @@ class ConverterService:
                     loop.close()
                 except Exception as ex:
                     logger.error(f"Async execution of preset failed: {ex}")
-                    return False, f"Conversion failed: {ex}"
+                    success = False
+                    msg = f"Conversion failed: {ex}"
+                    error_trace = traceback.format_exc()
             else:
                 success = handler(
                     input_path=str(input_path),
@@ -337,18 +435,60 @@ class ConverterService:
                     **kwargs,
                 )
 
-            if success is False:
-                return False, "Conversion returned failure status from FFmpeg."
-
-            if not Path(output_file).is_file():
-                return False, f"Process finished but output file was not created:\n{output_file}"
-
-            return True, f"Successfully converted to {output_file}"
+            if success is False and not msg:
+                msg = "Conversion returned failure status from FFmpeg."
+            elif success is not False:
+                if not Path(output_file).is_file():
+                    success = False
+                    msg = f"Process finished but output file was not created:\n{output_file}"
+                else:
+                    success = True
+                    msg = f"Successfully converted to {output_file}"
 
         except Exception as e:
-            msg = f"Error during conversion: {e}\n{traceback.format_exc()}"
-            logger.error(msg)
-            return False, str(e)
+            success = False
+            error_trace = traceback.format_exc()
+            msg = f"Error during conversion: {e}"
+            logger.error(f"{msg}\n{error_trace}")
+
+        # Write to ZeroXe logs system
+        if kwargs.get("write_log", True):
+            try:
+                from zeroxe.utils.log_util import write_process_log
+                elapsed = (datetime.datetime.now() - start_time).total_seconds()
+                p_id = p_obj.id if p_obj else "unknown"
+                p_name = p_obj.name if p_obj else "Unknown Preset"
+                status_str = "SUCCESS" if success else "FAILED"
+                content_lines = [
+                    f"Converter Operation : {p_name}",
+                    f"Preset ID           : {p_id}",
+                    f"Input Path          : {input_path}",
+                    f"Output File         : {output_file}",
+                    f"Framerate           : {framerate} fps",
+                    f"Quality             : {quality} (qscale)",
+                    f"Duration            : {elapsed:.2f} seconds",
+                    f"Status              : {status_str}",
+                    f"Message             : {msg}",
+                ]
+                if not success and error_trace:
+                    content_lines.extend(["", "Error Details:", error_trace])
+
+                write_process_log(
+                    category="converter",
+                    process_name=f"converter_{p_id}",
+                    content="\n".join(content_lines),
+                    extra_meta={
+                        "Preset": p_name,
+                        "Status": status_str,
+                        "Input": Path(input_path).name,
+                        "Output": Path(output_file).name,
+                        "Duration": f"{elapsed:.2f}s",
+                    },
+                )
+            except Exception as log_err:
+                logger.warning(f"Could not write process log for converter: {log_err}")
+
+        return success, msg
 
     @classmethod
     def inspect_input_path(cls, path_str: str) -> dict[str, Any]:
