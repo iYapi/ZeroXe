@@ -83,20 +83,46 @@ KITSU_PASSWORD=password
 
 ---
 
-## 🛠️ Pipeline CLI & Path Generation
+## 🛠️ CLI Interface & Usage
 
-The `pipeline/` folder in this repository acts as a local example and reference implementation. In production, ZeroXe resolves the live `pipeline.yaml` dynamically from the NAS via `zeroxe_map.yaml`.
-
-The pipeline core can be imported in Python or used as a standalone CLI tool:
+ZerØXe provides a unified CLI entrypoint (`zeroxe`) for launching the desktop GUI, running batch pipeline tasks, resolving paths, and managing media headless:
 
 ```bash
-# Resolve shot master and version paths
-python -m pipeline.Commands.main shot-path --dept Layout --ep ep998 --sq sq01 --sh sh0020 --json
-```
+# Launch the desktop GUI
+zeroxe
+# Or explicitly:
+zeroxe gui
+python -m zeroxe
+python -m zeroxe.main
 
-**Example Output**:
-- **Master Path**: `/mnt/I/.../02_production/02_layout/ep998/ep998_sq01/ep998_sq01_sh0020/mdt_ep998_sq01_sh0020_lay.blend`
-- **Version Path**: `/mnt/I/.../02_production/02_layout/ep998/ep998_sq01/ep998_sq01_sh0020/progress/mdt_ep998_sq01_sh0020_lay_v001.blend`
+# Show version and info
+zeroxe --version
+zeroxe info
+zeroxe info --json
+
+# Resolve shot and asset paths
+zeroxe shot-path -d Layout -e ep998 -s sq01 --sh sh0020 --json
+zeroxe asset-path -t CHAR -n Hero_Char -d Model --json
+
+# DCC scene file generation & versioning
+zeroxe generate -f /path/to/shot.blend -d Layout
+zeroxe up-version -f /path/to/shot_v001.blend
+zeroxe up-master -f /path/to/progress/shot_v002.blend
+
+# Transcode media & image sequences
+zeroxe convert -i /path/to/frames_folder/ -p folder_to_mp4
+zeroxe list-presets --json
+zeroxe inspect -i /path/to/media.mov
+
+# Cooperative file locks
+zeroxe lock -k ep998_sq01_sh0020_lay --check
+zeroxe lock -k ep998_sq01_sh0020_lay --acquire
+
+# Inspect & update application configuration
+zeroxe config --list
+zeroxe config --get software/active_blender
+zeroxe config --set software/dcc_timeout 900
+```
 
 ---
 

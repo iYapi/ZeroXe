@@ -1,10 +1,9 @@
 import sys
-from zeroxe import config
-from zeroxe.api.gazu_client import init_kitsu
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
+from zeroxe import config
+from zeroxe.api.gazu_client import init_kitsu
 from zeroxe.utils.icon_util import get_app_icon
 from zeroxe.views.main_view import MainView
 
@@ -30,5 +29,9 @@ def run():
 
     sys.exit(app.exec())
 
+def main(argv=None) -> int:
+    from zeroxe.cli import main as cli_main
+    return cli_main(argv)
+
 if __name__ == "__main__":
-    run()
+    sys.exit(main())

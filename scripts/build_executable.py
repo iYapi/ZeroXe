@@ -98,6 +98,7 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
         "PySide6.QtGui",
         "PySide6.QtWidgets",
         "zeroxe.api",
+        "zeroxe.cli",
         "zeroxe.controllers",
         "zeroxe.models",
         "zeroxe.services",
