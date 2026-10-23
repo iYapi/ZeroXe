@@ -77,7 +77,9 @@ ZeroXe/
         ├── utils/             # Helper utilities (security/encryption, paths)
         ├── views/             # Custom QWidget / QMainWindow classes (View logic)
         ├── config.py          # App constants, environment settings, version info
-        └── main.py            # Application entrypoint
+        ├── cli.py             # Unified CLI dispatcher & headless subcommands
+        ├── __main__.py        # Executable entrypoint for python -m zeroxe
+        └── main.py            # Application entrypoint & Qt GUI launcher
 ```
 
 ---

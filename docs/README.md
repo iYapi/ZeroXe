@@ -1,62 +1,84 @@
-# ZeroXe Documentation
+# ZeroXe Technical Documentation
 
-Welcome to the **ZeroXe** project documentation.
+Welcome to the **ZeroXe** technical documentation portal. This documentation provides in-depth guides covering the application architecture, command-line interface, pipeline builders, DCC automation, and collaborative production services.
 
-## Guides & References
+---
 
-1. **[Architecture Guide](ARCHITECTURE_GUIDE.md)**
-   - Decoupled Layered MVC (Model - View - Controller - Service)
-   - Directory structure & layer responsibilities
-   - Model, Service, Controller, and View patterns
-   - Local credential security & encryption (`src/zeroxe/utils/security.py`)
-   - Concurrency & asynchronous `QThread` patterns
+## Documentation Directory
 
-2. **[CLI Architecture & Command Manual](CLI_USAGE_AND_MANUAL.md)**
-   - Hybrid GUI/CLI invocation (`zeroxe`, `python -m zeroxe`, standalone binary)
-   - Headless execution mode without active display servers
-   - Full subcommand reference (`shot-path`, `asset-path`, `generate`, `up-version`, `up-master`, `convert`, `lock`, `config`, `kitsu`, `info`)
-   - Standardized exit codes and JSON output schemas for automation & CI/CD pipelines
+The documentation is organized into four core functional domains:
 
-3. **[Development Workflow & Cookbook](DEVELOPMENT_WORKFLOW.md)**
-   - 6-step guide for creating new screens/tabs
-   - Qt Designer & `compile_ui.py` workflow
-   - Qt Model/View & Search Proxy best practices
-   - Useful CLI and build commands
+```
+docs/
+├── README.md                  # Documentation Hub & Central Index
+│
+├── [ Core Architecture & Development ]
+│   ├── ARCHITECTURE.md            # System Architecture, Layered MVC & Security Model
+│   ├── DEVELOPMENT_WORKFLOW.md    # UI Design, Qt Designer Workflow & Build Recipes
+│   └── DEVELOPER_MANUAL.md        # Comprehensive Engineering Guide & NAS Deployment
+│
+├── [ Interfaces & Automation ]
+│   └── CLI_REFERENCE.md           # Command Line Reference, Headless Modes & CI/CD Recipes
+│
+├── [ Pipeline Builders & DCC Integration ]
+│   ├── PIPELINE_FEATURES.md       # Dynamic Feature Registry (@register_feature) & Batch Execution
+│   ├── LIGHTING_BUILDER.md        # Lighting Scene Generation & FG/BG Collection Schemas
+│   └── COMPOSITING_BUILDER.md     # Node Graph Generation & Mastershot Template System
+│
+└── [ Collaboration & Production Services ]
+    ├── FILE_LOCKING.md            # Cooperative Application Locks & Version Audit Trail
+    └── NOTIFICATION_SYSTEM.md     # Real-Time Kitsu Event Stream & OS Desktop Alerts
+```
 
-4. **[File Locking & Version History System](LOCK_AND_VERSION_SYSTEM.md)**
-   - Cooperative application-level locks in `00_pipeline/locks/`
-   - Chronological audit logs in `00_pipeline/history/`
-   - Kitsu ID & artist identity tracking
-   - Process monitoring & auto-unlock on DCC exit
-   - Force unlock mechanism & CLI reference
+---
 
-5. **[Pipeline Features & Batch Execution Guide](PIPELINE_FEATURES_AND_BATCH_EXECUTION.md)**
-   - Dynamic `@register_feature` pipeline discovery
-   - Incremental versioning (`Up Version`) and publish (`Up Master`)
-   - Strict per-project feature scoping via `zeroxe_map.yaml`
-   - Multi-select batch execution workflow
-   - NAS deployment and CLI commands
+## 1. Core Architecture & Development
 
-6. **[Complete Developer & Pipeline Manual](FULL_DEVELOPER_GUIDE.md)**
-   - End-to-end guide for modifying desktop codebase (`src/zeroxe/`) and pipeline (`pipeline/`)
-   - Creating UI components, views, controllers, and services
-   - Step-by-step adding custom features with `@register_feature`
-   - Cooperative locks, path resolvers, presets, and NAS deployment
+Guides for software engineers and contributors working on the desktop application codebase (`src/zeroxe/`).
 
-7. **[Lighting Builder & FG Asset Batch Generation Guide](LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md)**
-   - Lighting scene generation architecture & view layer presets
-   - Foreground (`fg`) and Background (`bg`) collection hierarchy
-   - Single shot interactive modal (`LightingAssetDialog`)
-   - Batch generation using YAML mapping files (Per-Shot, Global, Per-Sequence, Wildcards)
-   - Auto-discovery mechanism & CLI usage
+| Document | Primary Topics | Target Audience |
+| :--- | :--- | :--- |
+| **[Architecture Guide](ARCHITECTURE.md)** | Decoupled Layered MVC, Service layer design, machine-bound symmetric encryption, asynchronous `QThread` patterns. | Core Developers, Architects |
+| **[Development Workflow](DEVELOPMENT_WORKFLOW.md)** | 6-step UI creation guide, Qt Designer `.ui` workflow, UI compilation via `compile_ui.py`, PySide6 model/view best practices. | UI Engineers, Contributors |
+| **[Developer Manual](DEVELOPER_MANUAL.md)** | End-to-end instructions for modifying views/controllers, implementing custom DCC plugins, and deploying to studio NAS mounts. | Senior Engineers, Technical Directors |
 
-8. **[Compositing Builder & Mastershot Guide](COMPOSITING_BUILDER_AND_MASTERSHOT_GUIDE.md)**
-   - Node graph setup, mastershot template inheritance, and sibling shot matching
-   - Custom template file selection and batch execution workflow
+---
 
-9. **[Notification & Kitsu Real-Time Event System Guide](NOTIFICATION_SYSTEM_GUIDE.md)**
-   - Native OS desktop notifications via `QSystemTrayIcon`
-   - Dedicated background Socket.IO worker (`KitsuNotificationWorker`)
-   - Intelligent user filtering (ignores self-actions, targets assigned tasks)
-   - Real-time data hydration & project code formatting
-   - Centralized notification history & detail inspection modal
+## 2. Interfaces & Automation
+
+Documentation for running ZeroXe in production environments, terminal workflows, and automated pipeline scripts.
+
+| Document | Primary Topics | Target Audience |
+| :--- | :--- | :--- |
+| **[CLI Reference Manual](CLI_REFERENCE.md)** | Unified CLI entrypoint (`zeroxe`), headless execution, JSON output schemas, subcommands (`shot-path`, `convert`, `generate`, `lock`, `config`), and automation recipes. | Pipeline TDs, DevOps, Automation Engineers |
+
+---
+
+## 3. Pipeline Builders & DCC Integration
+
+Detailed specifications for scene builders, DCC execution (Blender), and version publishing workflows.
+
+| Document | Primary Topics | Target Audience |
+| :--- | :--- | :--- |
+| **[Pipeline Features & Batch Execution](PIPELINE_FEATURES.md)** | Dynamic `@register_feature` discovery, incremental versioning (`Up Version`), master publish (`Up Master`), and multi-select batch execution. | Pipeline Technical Directors |
+| **[Lighting Builder & FG Assets](LIGHTING_BUILDER.md)** | Scene generation architecture, view layer presets, Foreground (`fg`) / Background (`bg`) collection hierarchies, and YAML batch mapping schemas. | Lighting Leads, Pipeline TDs |
+| **[Compositing Builder & Mastershots](COMPOSITING_BUILDER.md)** | Node graph initialization, mastershot template inheritance, sibling shot matching, and custom blend template overrides. | Compositing Leads, TDs |
+
+---
+
+## 4. Collaboration & Production Services
+
+Systems that synchronize local workstations with shared production storage and tracking platforms.
+
+| Document | Primary Topics | Target Audience |
+| :--- | :--- | :--- |
+| **[File Locking & Version History](FILE_LOCKING.md)** | Cooperative file locking (`00_pipeline/locks/`), user identity resolution via Kitsu, process monitoring, auto-unlock on DCC termination, and version audit logs. | Pipeline TDs, System Administrators |
+| **[Notification System](NOTIFICATION_SYSTEM.md)** | Real-time Kitsu WebSocket/Socket.IO worker (`KitsuNotificationWorker`), smart event filtering, native desktop notifications, and detail inspection modals. | Production Coordinators, Developers |
+
+---
+
+## Recommended Reading Paths
+
+- **New Desktop App Developers**: Start with [Architecture](ARCHITECTURE.md) $\rightarrow$ [Development Workflow](DEVELOPMENT_WORKFLOW.md) $\rightarrow$ [Developer Manual](DEVELOPER_MANUAL.md).
+- **Pipeline Technical Directors**: Start with [CLI Reference](CLI_REFERENCE.md) $\rightarrow$ [Pipeline Features](PIPELINE_FEATURES.md) $\rightarrow$ [Lighting Builder](LIGHTING_BUILDER.md) $\rightarrow$ [Compositing Builder](COMPOSITING_BUILDER.md).
+- **Production & Systems TDs**: Start with [File Locking](FILE_LOCKING.md) $\rightarrow$ [Notification System](NOTIFICATION_SYSTEM.md) $\rightarrow$ [CLI Reference](CLI_REFERENCE.md).
