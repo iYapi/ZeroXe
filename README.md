@@ -145,12 +145,14 @@ python test/test_shot_path.py
 Detailed architectural and workflow guides are available in the [`docs/`](docs/) directory:
 
 1. **[Architecture Guide](docs/ARCHITECTURE_GUIDE.md)**: Detailed MVC layers, security encryption, and pipeline design.
-2. **[Development Workflow & Cookbook](docs/DEVELOPMENT_WORKFLOW.md)**: Step-by-step UI creation guide, compiler usage, and AppImage building.
-3. **[File Locking & Version History System](docs/LOCK_AND_VERSION_SYSTEM.md)**: Cooperative application locks, Kitsu identity tracking, and audit trails.
-4. **[Pipeline Features & Batch Execution Guide](docs/PIPELINE_FEATURES_AND_BATCH_EXECUTION.md)**: Dynamic pipeline discovery, `@register_feature`, incremental versioning (`Up Version`), master publish (`Up Master`), and multi-select batch processing.
-5. **[Complete Developer & Pipeline Manual](docs/FULL_DEVELOPER_GUIDE.md)**: End-to-end instructions for modifying desktop codebase, creating UI screens, adding custom DCC features, and NAS deployment.
-6. **[Lighting Builder & FG Asset Batch Generation Guide](docs/LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md)**: Architecture, collection hierarchy (`fg`/`bg`), interactive checklist, and YAML mapping schemas for batch execution.
-7. **[Notification & Kitsu Real-Time Event System Guide](docs/NOTIFICATION_SYSTEM_GUIDE.md)**: System tray notifications, background Socket.IO worker, smart user filtering, data hydration, and project code display.
+2. **[CLI Architecture & Command Manual](docs/CLI_USAGE_AND_MANUAL.md)**: Headless terminal execution, JSON schemas, CI/CD automation, and full subcommand reference.
+3. **[Development Workflow & Cookbook](docs/DEVELOPMENT_WORKFLOW.md)**: Step-by-step UI creation guide, compiler usage, and AppImage building.
+4. **[File Locking & Version History System](docs/LOCK_AND_VERSION_SYSTEM.md)**: Cooperative application locks, Kitsu identity tracking, and audit trails.
+5. **[Pipeline Features & Batch Execution Guide](docs/PIPELINE_FEATURES_AND_BATCH_EXECUTION.md)**: Dynamic pipeline discovery, `@register_feature`, incremental versioning (`Up Version`), master publish (`Up Master`), and multi-select batch processing.
+6. **[Complete Developer & Pipeline Manual](docs/FULL_DEVELOPER_GUIDE.md)**: End-to-end instructions for modifying desktop codebase, creating UI screens, adding custom DCC features, and NAS deployment.
+7. **[Lighting Builder & FG Asset Batch Generation Guide](docs/LIGHTING_BUILDER_AND_FG_BATCH_GUIDE.md)**: Architecture, collection hierarchy (`fg`/`bg`), interactive checklist, and YAML mapping schemas for batch execution.
+8. **[Compositing Builder & Mastershot Guide](docs/COMPOSITING_BUILDER_AND_MASTERSHOT_GUIDE.md)**: Node graph generation, sibling shot templates, and master template blend file linking.
+9. **[Notification & Kitsu Real-Time Event System Guide](docs/NOTIFICATION_SYSTEM_GUIDE.md)**: System tray notifications, background Socket.IO worker, smart user filtering, data hydration, and project code display.
 
 
 ---
