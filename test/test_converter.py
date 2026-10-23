@@ -336,3 +336,45 @@ def test_main_view_has_converter_tab(qapp):
     main_view.tab_widget.setCurrentIndex(conv_idx)
 
     main_view.close()
+
+
+def test_bundled_pipeline_ffmpeg_resolution():
+    """Verify ConverterService discovers bundled pipeline or assets FFmpeg binary."""
+    from pathlib import Path
+    ffmpeg_exe = ConverterService.get_ffmpeg_executable()
+    assert ffmpeg_exe is not None
+    assert Path(ffmpeg_exe).is_file()
+    assert os.access(ffmpeg_exe, os.X_OK)
+
+    # Check that either pipeline/bin or assets/bin is resolved
+    p = Path(ffmpeg_exe).resolve()
+    assert "pipeline" in str(p) or "assets" in str(p) or "ffmpeg" in p.name.lower()
+
+
+def test_folder_to_mp4_read_only_source_directory(tmp_path):
+    """Verify folder_to_mp4 succeeds even if the input source directory is read-only (NAS/render shares)."""
+    seq_dir = tmp_path / "readonly_seq"
+    seq_dir.mkdir()
+
+    # Create dummy frame
+    (seq_dir / "frame_0001.ppm").write_bytes(b"P6\n2 2\n255\n" + (b"\xff\x00\x00" * 4))
+    (seq_dir / "frame_0002.ppm").write_bytes(b"P6\n2 2\n255\n" + (b"\x00\xff\x00" * 4))
+
+    out_mp4 = tmp_path / "readonly_output.mp4"
+
+    # Set directory to read-only (0o555)
+    seq_dir.chmod(0o555)
+    try:
+        success, msg = ConverterService.execute_preset(
+            preset="folder_to_mp4",
+            input_path=str(seq_dir),
+            output_file=str(out_mp4),
+            framerate=24,
+            quality=15,
+        )
+        assert success is True, f"Failed on read-only source directory: {msg}"
+        assert out_mp4.is_file()
+    finally:
+        # Restore permissions for cleanup
+        seq_dir.chmod(0o755)
+

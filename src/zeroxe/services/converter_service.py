@@ -57,18 +57,26 @@ class ConverterService:
         cls._cached_mtimes.clear()
 
     @classmethod
-    def get_ffmpeg_executable(cls) -> str:
+    def get_ffmpeg_executable(cls, project_name: str | None = None) -> str:
         """Find the path to the ffmpeg executable across multiple environments.
 
         Order of resolution:
         1. SettingsService.get_ffmpeg_path() if configured and valid
         2. Environment variables FFMPEG_BINARY or FFMPEG_PATH
-        3. shutil.which("ffmpeg")
-        4. Standard system binary locations:
-           - Linux/Unix: /usr/bin/ffmpeg, /usr/sbin/ffmpeg, /usr/local/bin/ffmpeg, /usr/local/sbin/ffmpeg, /bin/ffmpeg
+        3. Pipeline distribution bundled binary:
+           - Active NAS pipeline: PipelineService.get_active_pipeline_dir() / "bin" / <platform> / ffmpeg
+           - Local workspace pipeline: pipeline / "bin" / <platform> / ffmpeg
+           - Pipeline Presets converter bin: Presets / "Converter" / "bin" / ...
+        4. Application bundled binary:
+           - config.ASSETS_DIR / "bin" / <platform> / ffmpeg
+           - config.BASE_DIR / "bin" / ffmpeg
+           - config.USER_DATA_DIR / "bin" / ffmpeg
+        5. PATH search via shutil.which("ffmpeg")
+        6. Standard system binary locations:
+           - Linux/Unix: /usr/bin/ffmpeg, /usr/sbin/ffmpeg, /usr/local/bin/ffmpeg, /bin/ffmpeg
            - macOS: /opt/homebrew/bin/ffmpeg, /opt/local/bin/ffmpeg
            - Windows: C:\\ffmpeg\\bin\\ffmpeg.exe, C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe
-        5. Fallback to "ffmpeg"
+        7. Fallback to "ffmpeg"
 
         Also prepends the executable's directory to os.environ["PATH"] if missing.
         """
@@ -83,6 +91,20 @@ class ConverterService:
             except OSError:
                 pass
             return None
+
+        # Determine platform subfolder and binary filename
+        if sys.platform.startswith("linux"):
+            platform_dir = "linux"
+            exe_name = "ffmpeg"
+        elif sys.platform == "win32":
+            platform_dir = "windows"
+            exe_name = "ffmpeg.exe"
+        elif sys.platform == "darwin":
+            platform_dir = "darwin"
+            exe_name = "ffmpeg"
+        else:
+            platform_dir = "other"
+            exe_name = "ffmpeg"
 
         # 1. Configured path in Settings
         try:
@@ -99,14 +121,65 @@ class ConverterService:
             if cand:
                 return cand
 
-        # 3. PATH search via shutil.which
+        # 3. Pipeline distribution bundled binary (NAS shared pipeline or workspace pipeline)
+        try:
+            active_pipe_dir = PipelineService.get_active_pipeline_dir(project_name=project_name)
+            if active_pipe_dir and active_pipe_dir.is_dir():
+                pipeline_candidates = [
+                    active_pipe_dir / "bin" / platform_dir / exe_name,
+                    active_pipe_dir / "bin" / exe_name,
+                    active_pipe_dir / "Presets" / "Converter" / "bin" / platform_dir / exe_name,
+                    active_pipe_dir / "Presets" / "Converter" / "bin" / exe_name,
+                ]
+                for p_cand in pipeline_candidates:
+                    cand = _try_candidate(p_cand)
+                    if cand:
+                        return cand
+        except Exception:
+            pass
+
+        # Local workspace pipeline fallback
+        try:
+            repo_pipe_dir = Path(__file__).resolve().parents[3] / "pipeline"
+            if repo_pipe_dir.is_dir():
+                repo_candidates = [
+                    repo_pipe_dir / "bin" / platform_dir / exe_name,
+                    repo_pipe_dir / "bin" / exe_name,
+                    repo_pipe_dir / "Presets" / "Converter" / "bin" / platform_dir / exe_name,
+                    repo_pipe_dir / "Presets" / "Converter" / "bin" / exe_name,
+                ]
+                for p_cand in repo_candidates:
+                    cand = _try_candidate(p_cand)
+                    if cand:
+                        return cand
+        except Exception:
+            pass
+
+        # 4. Application bundled assets (assets/bin or PyInstaller bundle)
+        try:
+            from zeroxe import config
+            app_candidates = [
+                config.ASSETS_DIR / "bin" / platform_dir / exe_name,
+                config.ASSETS_DIR / "bin" / exe_name,
+                config.BASE_DIR / "bin" / platform_dir / exe_name,
+                config.BASE_DIR / "bin" / exe_name,
+                config.USER_DATA_DIR / "bin" / exe_name,
+            ]
+            for a_cand in app_candidates:
+                cand = _try_candidate(a_cand)
+                if cand:
+                    return cand
+        except Exception:
+            pass
+
+        # 5. PATH search via shutil.which
         which_path = shutil.which("ffmpeg")
         if which_path:
             cand = _try_candidate(which_path)
             if cand:
                 return cand
 
-        # 4. Standard candidate locations
+        # 6. Standard system candidate locations
         system_candidates = [
             "/usr/bin/ffmpeg",
             "/usr/sbin/ffmpeg",
@@ -400,7 +473,7 @@ class ConverterService:
 
             # Auto-resolve ffmpeg executable for all handlers if not explicitly specified
             if "ffmpeg_executable" not in kwargs:
-                kwargs["ffmpeg_executable"] = cls.get_ffmpeg_executable()
+                kwargs["ffmpeg_executable"] = cls.get_ffmpeg_executable(project_name=kwargs.get("project_name"))
 
             handler = p_obj.handler
 
@@ -418,15 +491,21 @@ class ConverterService:
                         progress_callback=progress_callback,
                         **kwargs,
                     )
-                    success = loop.run_until_complete(coro)
+                    res = loop.run_until_complete(coro)
                     loop.close()
+                    if isinstance(res, tuple):
+                        success = bool(res[0])
+                        if len(res) > 1 and res[1]:
+                            msg = str(res[1])
+                    else:
+                        success = bool(res)
                 except Exception as ex:
                     logger.error(f"Async execution of preset failed: {ex}")
                     success = False
                     msg = f"Conversion failed: {ex}"
                     error_trace = traceback.format_exc()
             else:
-                success = handler(
+                res = handler(
                     input_path=str(input_path),
                     output_file=str(output_file),
                     framerate=framerate,
@@ -434,16 +513,24 @@ class ConverterService:
                     progress_callback=progress_callback,
                     **kwargs,
                 )
+                if isinstance(res, tuple):
+                    success = bool(res[0])
+                    if len(res) > 1 and res[1]:
+                        msg = str(res[1])
+                else:
+                    success = bool(res)
 
             if success is False and not msg:
-                msg = "Conversion returned failure status from FFmpeg."
+                ff_bin = kwargs.get("ffmpeg_executable", "ffmpeg")
+                msg = f"Conversion returned failure status from FFmpeg ({ff_bin})."
             elif success is not False:
                 if not Path(output_file).is_file():
                     success = False
                     msg = f"Process finished but output file was not created:\n{output_file}"
                 else:
                     success = True
-                    msg = f"Successfully converted to {output_file}"
+                    if not msg:
+                        msg = f"Successfully converted to {output_file}"
 
         except Exception as e:
             success = False

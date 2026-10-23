@@ -172,11 +172,11 @@ echo "==> Container Image:     ${IMAGE_NAME}"
 echo "=========================================================="
 
 echo "==> 1. Building Container Image..."
-"${CONTAINER_TOOL}" build "${EXTRA_BUILD_ARGS[@]}" -f "${DOCKERFILE}" -t "${IMAGE_NAME}" "${PROJECT_ROOT}"
+"${CONTAINER_TOOL}" build --network=host "${EXTRA_BUILD_ARGS[@]}" -f "${DOCKERFILE}" -t "${IMAGE_NAME}" "${PROJECT_ROOT}"
 
 echo "==> 2. Extracting Compiled AppImage Artifact..."
 mkdir -p "${PROJECT_ROOT}/dist"
-"${CONTAINER_TOOL}" run --rm -e DISTRO_TAG="${DISTRO_TAG}" -v "${PROJECT_ROOT}/dist:/app/dist" "${IMAGE_NAME}"
+"${CONTAINER_TOOL}" run --rm --network=host -e DISTRO_TAG="${DISTRO_TAG}" -v "${PROJECT_ROOT}/dist:/app/dist" "${IMAGE_NAME}"
 
 echo "=========================================================="
 echo "AppImage Build Finished Successfully!"

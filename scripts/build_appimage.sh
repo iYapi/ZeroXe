@@ -49,6 +49,9 @@ mkdir -p "${APP_DIR}/usr/share/icons/hicolor/scalable/apps"
 echo "==> Copying application payload into AppDir..."
 cp -r "${DIST_DIR}/${APP_NAME}/"* "${APP_DIR}/usr/bin/"
 
+# Ensure execute permissions on any bundled binaries (ffmpeg, etc.)
+find "${APP_DIR}/usr/bin" -type f -name "ffmpeg*" -exec chmod +x {} + 2>/dev/null || true
+
 # 4. Set up the Application Icon
 if [ -n "${ICON_SOURCE}" ] && [ -f "${ICON_SOURCE}" ]; then
     echo "==> Using application icon from ${ICON_SOURCE}..."
@@ -90,7 +93,7 @@ echo "==> Generating AppRun entrypoint..."
 cat <<'EOF' > "${APP_DIR}/AppRun"
 #!/usr/bin/env bash
 SELF_DIR="$(dirname "$(readlink -f "${0}")")"
-export PATH="${SELF_DIR}/usr/bin:${PATH}"
+export PATH="${SELF_DIR}/usr/bin/assets/bin/linux:${SELF_DIR}/usr/bin/pipeline/bin/linux:${SELF_DIR}/usr/bin:${PATH}"
 export APPDIR="${SELF_DIR}"
 export XDG_DATA_DIRS="${SELF_DIR}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 

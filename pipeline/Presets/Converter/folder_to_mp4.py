@@ -35,7 +35,7 @@ def _ensure_in_path(bin_dir: Path) -> None:
 
 
 def _resolve_ffmpeg_executable(custom_path: str | None = None) -> str:
-    """Resolve FFmpeg executable robustly across environments."""
+    """Resolve FFmpeg executable robustly across environments, prioritizing pipeline and bundled builds."""
     def _is_executable(p_str: str | Path | None) -> str | None:
         if not p_str:
             return None
@@ -53,7 +53,31 @@ def _resolve_ffmpeg_executable(custom_path: str | None = None) -> str:
     if res:
         return res
 
-    # 2. Try SettingsService if available
+    # 2. Try ConverterService centralized resolver if accessible
+    try:
+        from zeroxe.services.converter_service import ConverterService
+        res = _is_executable(ConverterService.get_ffmpeg_executable())
+        if res:
+            return res
+    except Exception:
+        pass
+
+    # Determine platform subfolder and binary name
+    import sys
+    if sys.platform.startswith("linux"):
+        platform_dir = "linux"
+        exe_name = "ffmpeg"
+    elif sys.platform == "win32":
+        platform_dir = "windows"
+        exe_name = "ffmpeg.exe"
+    elif sys.platform == "darwin":
+        platform_dir = "darwin"
+        exe_name = "ffmpeg"
+    else:
+        platform_dir = "other"
+        exe_name = "ffmpeg"
+
+    # 3. Try SettingsService if available
     try:
         from zeroxe.services.settings_service import SettingsService
         res = _is_executable(SettingsService.get_ffmpeg_path())
@@ -62,19 +86,62 @@ def _resolve_ffmpeg_executable(custom_path: str | None = None) -> str:
     except Exception:
         pass
 
-    # 3. Environment variables
+    # 4. Environment variables
     for var in ("FFMPEG_BINARY", "FFMPEG_PATH"):
         res = _is_executable(os.environ.get(var, "").strip())
         if res:
             return res
 
-    # 4. PATH search via shutil.which
+    # 5. Pipeline distribution bundled binary (local or NAS)
+    try:
+        from zeroxe.services.pipeline_service import PipelineService
+        active_dir = PipelineService.get_active_pipeline_dir()
+        if active_dir and active_dir.is_dir():
+            for p_cand in (
+                active_dir / "bin" / platform_dir / exe_name,
+                active_dir / "bin" / exe_name,
+                active_dir / "Presets" / "Converter" / "bin" / platform_dir / exe_name,
+            ):
+                res = _is_executable(p_cand)
+                if res:
+                    return res
+    except Exception:
+        pass
+
+    # Local repository pipeline/bin
+    try:
+        repo_pipe_dir = Path(__file__).resolve().parents[2] / "bin"
+        for p_cand in (
+            repo_pipe_dir / platform_dir / exe_name,
+            repo_pipe_dir / exe_name,
+        ):
+            res = _is_executable(p_cand)
+            if res:
+                return res
+    except Exception:
+        pass
+
+    # 6. Application bundled assets (assets/bin)
+    try:
+        from zeroxe import config
+        for a_cand in (
+            config.ASSETS_DIR / "bin" / platform_dir / exe_name,
+            config.ASSETS_DIR / "bin" / exe_name,
+            config.BASE_DIR / "bin" / exe_name,
+        ):
+            res = _is_executable(a_cand)
+            if res:
+                return res
+    except Exception:
+        pass
+
+    # 7. PATH search via shutil.which
     import shutil
     res = _is_executable(shutil.which("ffmpeg"))
     if res:
         return res
 
-    # 5. Standard candidate locations
+    # 8. Standard candidate locations
     candidates = [
         "/usr/bin/ffmpeg",
         "/usr/sbin/ffmpeg",
@@ -102,7 +169,7 @@ async def execute(
     progress_callback: Callable | None = None,
     ffmpeg_executable: str | None = None,
     **kwargs,
-) -> bool:
+) -> tuple[bool, str]:
     """Convert all images in a folder to MP4 using concat demuxer.
 
     Args:
@@ -114,13 +181,15 @@ async def execute(
         ffmpeg_executable: Optional explicit path to ffmpeg binary
 
     Returns:
-        True if successful, False otherwise
+        Tuple of (success: bool, status_message: str)
     """
+    concat_file: Path | None = None
     try:
         folder = Path(input_path)
         if not folder.is_dir():
-            logger.error(f"Input path is not a directory: {input_path}")
-            return False
+            msg = f"Input path is not a directory: {input_path}"
+            logger.error(msg)
+            return False, msg
 
         out_path = Path(output_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,8 +202,9 @@ async def execute(
         ])
 
         if not image_files:
-            logger.error(f"No image files found in {input_path}")
-            return False
+            msg = f"No supported image files found in {input_path}"
+            logger.error(msg)
+            return False, msg
 
         ffmpeg_bin = _resolve_ffmpeg_executable(ffmpeg_executable or kwargs.get("ffmpeg_executable"))
 
@@ -146,66 +216,61 @@ async def execute(
             f"  Quality: {quality}"
         )
 
-        # Create concat file listing all images
-        concat_file = folder / "ffmpeg_files.txt"
+        # Create safe temporary concat file in system temp (avoids read-only network shares)
+        import tempfile
+        concat_fd, concat_str = tempfile.mkstemp(prefix="zeroxe_concat_", suffix=".txt")
+        concat_file = Path(concat_str)
 
-        try:
-            with open(concat_file, 'w', encoding='utf-8') as f:
-                for img_file in image_files:
-                    # Write relative path for safe concat demuxing
-                    f.write(f"file '{img_file.name}'\n")
+        with os.fdopen(concat_fd, 'w', encoding='utf-8') as f:
+            for img_file in image_files:
+                # Escape single quotes and write absolute POSIX paths
+                escaped_path = img_file.resolve().as_posix().replace("'", "'\\''")
+                f.write(f"file '{escaped_path}'\n")
 
-            logger.info(f"Created concat file with {len(image_files)} entries")
+        logger.info(f"Created temp concat file with {len(image_files)} entries at {concat_file}")
 
-            # Build FFmpeg command using concat demuxer
-            ffmpeg = (
-                FFmpeg(executable=ffmpeg_bin)
-                .option("y")  # overwrite output
-                .option("f", "concat")
-                .option("safe", "0")
-                .option("r", str(framerate))  # input framerate
-                .input(str(concat_file))
-                .output(
-                    str(out_path.resolve()),
-                    **{
-                        "vcodec": "mpeg4",
-                        "qscale:v": str(quality),
-                        "pix_fmt": "yuv420p",
-                    }
-                )
+        # Build FFmpeg command using concat demuxer with absolute paths
+        ffmpeg = (
+            FFmpeg(executable=ffmpeg_bin)
+            .option("y")  # overwrite output
+            .option("f", "concat")
+            .option("safe", "0")
+            .option("r", str(framerate))  # input framerate
+            .input(str(concat_file.resolve()))
+            .output(
+                str(out_path.resolve()),
+                **{
+                    "vcodec": "mpeg4",
+                    "qscale:v": str(quality),
+                    "pix_fmt": "yuv420p",
+                }
             )
+        )
 
-            if progress_callback:
-                @ffmpeg.on("progress")
-                def on_progress(p):
-                    try:
-                        progress_callback(p)
-                    except Exception:
-                        pass
-
-            # Change to folder directory for relative paths
-            original_dir = os.getcwd()
-            os.chdir(folder)
-
-            try:
-                logger.info("Starting FFmpeg conversion...")
-                await ffmpeg.execute()
-                logger.info("✓ Conversion complete!")
-            finally:
-                os.chdir(original_dir)
-
-            return True
-
-        finally:
-            # Clean up concat file
-            if concat_file.exists():
+        if progress_callback:
+            @ffmpeg.on("progress")
+            def on_progress(p):
                 try:
-                    concat_file.unlink()
-                    logger.info("Cleaned up temporary concat file")
-                except Exception as ex:
-                    logger.warning(f"Could not remove temporary concat file: {ex}")
+                    progress_callback(p)
+                except Exception:
+                    pass
+
+        logger.info("Starting FFmpeg conversion...")
+        await ffmpeg.execute()
+        logger.info("✓ Conversion complete!")
+        return True, f"Successfully converted to {out_path.name}"
 
     except Exception as e:
-        logger.error(f"An error occurred while executing FFmpeg: {e}")
+        err_msg = f"FFmpeg execution failed ({ffmpeg_bin if 'ffmpeg_bin' in locals() else 'ffmpeg'}): {e}"
+        logger.error(err_msg)
         logger.error(traceback.format_exc())
-        return False
+        return False, err_msg
+
+    finally:
+        # Clean up temporary concat file
+        if concat_file and concat_file.exists():
+            try:
+                concat_file.unlink()
+                logger.info(f"Cleaned up temporary concat file: {concat_file}")
+            except Exception as ex:
+                logger.warning(f"Could not remove temporary concat file: {ex}")

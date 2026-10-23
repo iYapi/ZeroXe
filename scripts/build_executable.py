@@ -87,6 +87,11 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
     if TEMPLATES_DIR.exists() and any(TEMPLATES_DIR.iterdir()):
         pyinstaller_cmd.append(f"--add-data={TEMPLATES_DIR}{sep}user_scripts/templates")
 
+    # Bundle pipeline binaries (ffmpeg) if directory exists
+    pipeline_bin_dir = PROJECT_ROOT / "pipeline" / "bin"
+    if pipeline_bin_dir.exists() and any(pipeline_bin_dir.iterdir()):
+        pyinstaller_cmd.append(f"--add-data={pipeline_bin_dir}{sep}pipeline/bin")
+
     # Explicit hidden imports to prevent runtime missing module errors
     hidden_imports = [
         "PySide6.QtCore",
@@ -102,6 +107,9 @@ def build_binary(onefile: bool = True, clean: bool = True) -> None:
         "packaging",
         "packaging.version",
         "requests",
+        "ffmpeg",
+        "ffmpeg.asyncio",
+        "pyee",
     ]
     for imp in hidden_imports:
         pyinstaller_cmd.extend(["--hidden-import", imp])
