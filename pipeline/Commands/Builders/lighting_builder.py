@@ -730,25 +730,51 @@ def link_animation():
 		cat_parents[fg_cat_name] = ensure_collection(fg_cat_name, parent=fg_root)
 		cat_parents[bg_cat_name] = ensure_collection(bg_cat_name, parent=bg_root)
 
-	# 3. Discover desired collections from Animation library
+	# 3. Scan category collections (chr, prp, vhc, etc.) from Animation library first
+	anim_abs = bpy.path.abspath(anim_file)
 	desired = {}
+	cat_colls_to_load = []
 	with bpy.data.libraries.load(anim_file, link=True) as (data_from, data_to):
 		for code, prefix in collection_list:
 			if prefix is None:
 				cam_coll = next((c for c in data_from.collections if c.lower() == "$CAMERA_COLLECTION".lower()), None)
 				desired[code] = [cam_coll] if cam_coll else []
 			else:
-				names = [n for n in data_from.collections if n.startswith(prefix)]
-				desired[code] = names
+				cat_coll = next((c for c in data_from.collections if c.lower() == code.lower()), None)
+				if cat_coll:
+					cat_colls_to_load.append(cat_coll)
+				desired[code] = []
+		if cat_colls_to_load:
+			data_to.collections = list(dict.fromkeys(cat_colls_to_load))
 
-	# 4. Link all animated asset collections from library
+	# 4. Check inside each category collection one by one to get child collections (c-, p-, v-, etc.)
+	loaded_cat_colls = []
+	for code, prefix in collection_list:
+		if not prefix or code in ["cam", "hdn", "ms", "set"]:
+			continue
+		cat_col = next((
+			c for c in bpy.data.collections
+			if c.name.lower() == code.lower()
+			and c.library and bpy.path.abspath(c.library.filepath) == anim_abs
+		), None)
+		if not cat_col:
+			print(f"[WARNING] Category collection '{code}' not found in animation library")
+			continue
+		loaded_cat_colls.append(cat_col)
+		child_names = []
+		for child_col in cat_col.children:
+			if child_col.name.startswith(prefix):
+				child_names.append(child_col.name)
+		desired[code] = child_names
+		print(f"Scanned '{cat_col.name}' -> found {len(child_names)} '{prefix}' collection(s): {child_names}")
+
+	# 5. Ensure all discovered child asset collections are linked from library
 	to_link = []
 	for code, names in desired.items():
 		if code == "cam":
 			continue
 		to_link.extend(names)
 
-	anim_abs = bpy.path.abspath(anim_file)
 	existing_anim_colls = {
 		c.name for c in bpy.data.collections
 		if c.library and bpy.path.abspath(c.library.filepath) == anim_abs
@@ -761,7 +787,7 @@ def link_animation():
 
 	bpy.context.view_layer.update()
 
-	# 5. Place each loaded collection into corresponding _fg or _bg parent
+	# 6. Recreate hierarchy: place each loaded collection into corresponding _fg or _bg parent
 	for code, child_names in desired.items():
 		if code == "cam":
 			continue
@@ -802,7 +828,16 @@ def link_animation():
 					bpy.context.scene.collection.children.unlink(col)
 				print(f"Linked '{cname}' under '{target_label}'")
 
-	# 6. Camera handling
+	# Remove temporary linked category parent collections (chr, prp, vhc)
+	for cat_col in loaded_cat_colls:
+		for scene in bpy.data.scenes:
+			_unlink_collection_from(scene.collection, cat_col)
+		try:
+			bpy.data.collections.remove(cat_col)
+		except RuntimeError:
+			pass
+
+	# 7. Camera handling
 	link_mode = bool($METHOD)
 	cam_names = next((v for k, v in desired.items() if k.lower() == "$CAMERA_COLLECTION".lower()), [])
 	if cam_names:
