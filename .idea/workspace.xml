@@ -6,15 +6,17 @@
   <component name="ChangeListManager">
     <list default="true" id="f89015b3-c1d1-4aa8-bd5f-26e7126eebab" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build_info.json" beforeDir="false" afterPath="$PROJECT_DIR$/build_info.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipeline/Presets/Converter/folder_to_mp4.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Presets/Converter/folder_to_mp4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipeline/Presets/Converter/img_to_mp4.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Presets/Converter/img_to_mp4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipeline/Presets/Converter/video_to_mp4.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Presets/Converter/video_to_mp4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/build_appimage.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/build_appimage.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/build_appimage_docker.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/build_appimage_docker.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/build_executable.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/build_executable.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/zeroxe/services/converter_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/services/converter_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/test_converter.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_converter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/animation_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/animation_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/builder_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/compositing_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/compositing_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/layout_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/layout_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/lighting_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/Builders/sync_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/Builders/sync_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/feature_registry.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/feature_registry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Commands/versioning.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Commands/versioning.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pipeline/Presets/mdt_preset_bake_animation.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipeline/Presets/mdt_preset_bake_animation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/zeroxe/views/converter_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/zeroxe/views/converter_view.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -235,6 +237,8 @@
       <workItem from="1792554687065" duration="7919000" />
       <workItem from="1792639530307" duration="1335000" />
       <workItem from="1792726300636" duration="658000" />
+      <workItem from="1793088139930" duration="3932000" />
+      <workItem from="1793181319847" duration="1022000" />
     </task>
     <servers />
   </component>
@@ -242,7 +246,7 @@
     <option name="version" value="3" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1792658944839" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
+    <SUITE FILE_PATH="coverage/ZeroXe$main.coverage" NAME="main Coverage Results" MODIFIED="1793093733652" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe" />
     <SUITE FILE_PATH="coverage/ZeroXe$blender_downloader.coverage" NAME="blender_downloader Coverage Results" MODIFIED="1791517599624" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/ZeroXe$main_view.coverage" NAME="main_view Coverage Results" MODIFIED="1788508837608" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/zeroxe/views" />
     <SUITE FILE_PATH="coverage/ZeroXe$.coverage" NAME=" Coverage Results" MODIFIED="1791519653058" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />

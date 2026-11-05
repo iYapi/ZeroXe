@@ -89,9 +89,9 @@ class ConverterView(QWidget):
 
         # Configure Quality Spinbox (1 = best, 31 = lowest)
         self.ui.spinBox_qualityLevel.setRange(1, 31)
-        self.ui.spinBox_qualityLevel.setValue(15)
-        self.ui.spinBox_qualityLevel.setSuffix(" (qscale)")
-        self.ui.spinBox_qualityLevel.setToolTip("Quality level 1-31 (1 = best quality, 31 = lowest quality, default: 15)")
+        self.ui.spinBox_qualityLevel.setValue(1)
+        # self.ui.spinBox_qualityLevel.setSuffix(" (qscale)")
+        self.ui.spinBox_qualityLevel.setToolTip("Quality level 1-31 (1 = best quality, 31 = lowest quality, default: 1)")
 
         # Configure Image Preview Label
         self.ui.label_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
