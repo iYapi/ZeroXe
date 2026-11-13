@@ -138,18 +138,21 @@ def setup_view_layers():
         set_flags_on_collection(vl_char, "chr_fg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "prp_fg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "vhc_fg", holdout=False, indirect=False, exclude=False)
+        set_flags_on_collection(vl_char, "cwd_fg", holdout=False, indirect=False, exclude=False)
         
         # Background layers & set: holdout matte occluders
         set_flags_on_collection(vl_char, "bg", holdout=True, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "chr_bg", holdout=True, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "prp_bg", holdout=True, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "vhc_bg", holdout=True, indirect=False, exclude=False)
+        set_flags_on_collection(vl_char, "cwd_bg", holdout=True, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "set", holdout=True, indirect=False, exclude=False)
 
         # Legacy fallback
         set_flags_on_collection(vl_char, "chr", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "prp", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_char, "vhc", holdout=False, indirect=False, exclude=False)
+        set_flags_on_collection(vl_char, "cwd", holdout=False, indirect=False, exclude=False)
 
     # 3) SET: FG di indirect, BG & set di render
     if vl_set:
@@ -163,18 +166,21 @@ def setup_view_layers():
         set_flags_on_collection(vl_set, "chr_fg", holdout=False, indirect=True, exclude=False)
         set_flags_on_collection(vl_set, "prp_fg", holdout=False, indirect=True, exclude=False)
         set_flags_on_collection(vl_set, "vhc_fg", holdout=False, indirect=True, exclude=False)
+        set_flags_on_collection(vl_set, "cwd_fg", holdout=False, indirect=True, exclude=False)
         
         # Background layers & set: rendered
         set_flags_on_collection(vl_set, "bg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_set, "chr_bg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_set, "prp_bg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_set, "vhc_bg", holdout=False, indirect=False, exclude=False)
+        set_flags_on_collection(vl_set, "cwd_bg", holdout=False, indirect=False, exclude=False)
         set_flags_on_collection(vl_set, "set", holdout=False, indirect=False, exclude=False)
 
         # Legacy fallback
         set_flags_on_collection(vl_set, "chr", holdout=False, indirect=True, exclude=False)
         set_flags_on_collection(vl_set, "prp", holdout=False, indirect=True, exclude=False)
         set_flags_on_collection(vl_set, "vhc", holdout=False, indirect=True, exclude=False)
+        set_flags_on_collection(vl_set, "cwd", holdout=False, indirect=True, exclude=False)
         set_flags_on_collection(vl_set, "Fill_Light", indirect=True, holdout=False, exclude=True)
 
     # 4) SKY: semua OFF kecuali "cam" dan "sky"

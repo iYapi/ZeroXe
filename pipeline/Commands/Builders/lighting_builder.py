@@ -88,7 +88,7 @@ class LightingBuilder:
                     pass
 
         asset_type_map = {
-            config["id"] if isinstance(config, dict) and "id" in config else config.get("kitsu_id", category_key): (category_key, config)
+            (config.get("id") or config.get("kitsu_id") or category_key): (category_key, config)
             for category_key, config in asset_types.items()
             if isinstance(config, dict)
         }
@@ -278,7 +278,7 @@ class LightingBuilder:
                 if isinstance(config, dict):
                     c_code = str(config.get("code", "")).lower()
                     c_prefix = config.get("prefix")
-                    if c_code not in ["ms", "set"] and not c_code.startswith("ms") and c_prefix:
+                    if c_code not in ["ms", "set", "cwd"] and not c_code.startswith("ms") and c_prefix:
                         if c_prefix not in batch_fg:
                             batch_fg.append(c_prefix)
 
@@ -672,7 +672,7 @@ def _force_remove_collection(name: str):
 		print(f"[WARNING] Could not remove '{name}': {e}")
 
 def ensure_collection(name: str, parent=None) -> bpy.types.Collection:
-	coll = bpy.data.collections.get(name)
+	coll = next((c for c in bpy.data.collections if c.name == name and not c.library), None)
 	if not coll:
 		coll = bpy.data.collections.new(name)
 		print(f"Created collection: {name}")
@@ -720,7 +720,7 @@ def link_animation():
 	fg_root = ensure_collection("fg")
 	bg_root = ensure_collection("bg")
 
-	# 2. Ensure sub-category parent collections: chr_fg, chr_bg, prp_fg, prp_bg, vhc_fg, vhc_bg
+	# 2. Ensure sub-category parent collections: chr_fg, chr_bg, prp_fg, prp_bg, vhc_fg, vhc_bg, cwd_fg, cwd_bg
 	cat_parents = {}
 	for code, prefix in collection_list:
 		if code in ["cam", "hdn", "ms", "set"] or not prefix:
@@ -730,7 +730,7 @@ def link_animation():
 		cat_parents[fg_cat_name] = ensure_collection(fg_cat_name, parent=fg_root)
 		cat_parents[bg_cat_name] = ensure_collection(bg_cat_name, parent=bg_root)
 
-	# 3. Scan category collections (chr, prp, vhc, etc.) from Animation library first
+	# 3. Scan category collections (chr, prp, vhc, cwd > cwd_fg/cwd_bg, etc.) from Animation library first
 	anim_abs = bpy.path.abspath(anim_file)
 	desired = {}
 	cat_colls_to_load = []
@@ -739,6 +739,12 @@ def link_animation():
 			if prefix is None:
 				cam_coll = next((c for c in data_from.collections if c.lower() == "$CAMERA_COLLECTION".lower()), None)
 				desired[code] = [cam_coll] if cam_coll else []
+			elif code.lower() == "cwd":
+				for target_name in (code.lower(), f"{code.lower()}_fg", f"{code.lower()}_bg"):
+					matched_coll = next((c for c in data_from.collections if c.lower() == target_name), None)
+					if matched_coll:
+						cat_colls_to_load.append(matched_coll)
+				desired[code] = {"fg": [], "bg": []}
 			else:
 				cat_coll = next((c for c in data_from.collections if c.lower() == code.lower()), None)
 				if cat_coll:
@@ -747,14 +753,55 @@ def link_animation():
 		if cat_colls_to_load:
 			data_to.collections = list(dict.fromkeys(cat_colls_to_load))
 
-	# 4. Check inside each category collection one by one to get child collections (c-, p-, v-, etc.)
+	# 4. Check inside each category collection one by one to get child collections (c-, p-, v-, cd-, etc.)
 	loaded_cat_colls = []
 	for code, prefix in collection_list:
 		if not prefix or code in ["cam", "hdn", "ms", "set"]:
 			continue
+		prefix_variants = tuple(dict.fromkeys([
+			prefix,
+			prefix.replace("-", "_"),
+			prefix.replace("_", "-"),
+		]))
+
+		if code.lower() == "cwd":
+			cwd_col = next((
+				c for c in bpy.data.collections
+				if c.name.lower().split(".")[0] == code.lower()
+				and c.library and bpy.path.abspath(c.library.filepath) == anim_abs
+			), None)
+			if cwd_col:
+				loaded_cat_colls.append(cwd_col)
+
+			for sub_key, sub_name in (("fg", f"{code.lower()}_fg"), ("bg", f"{code.lower()}_bg")):
+				sub_col = None
+				if cwd_col:
+					sub_col = next((
+						c for c in cwd_col.children
+						if c.name.lower().split(".")[0] == sub_name
+					), None)
+				if not sub_col:
+					sub_col = next((
+						c for c in bpy.data.collections
+						if c.name.lower().split(".")[0] == sub_name
+						and c.library and bpy.path.abspath(c.library.filepath) == anim_abs
+					), None)
+				if not sub_col:
+					print(f"[WARNING] Crowd sub-collection '{sub_name}' not found in animation library")
+					continue
+				if sub_col not in loaded_cat_colls:
+					loaded_cat_colls.append(sub_col)
+				sub_children = []
+				for child_col in sub_col.children:
+					if child_col.name.startswith(prefix_variants) or child_col.name.startswith("c-"):
+						sub_children.append(child_col.name)
+				desired[code][sub_key] = sub_children
+				print(f"Scanned '{sub_col.name}' -> found {len(sub_children)} crowd collection(s): {sub_children}")
+			continue
+
 		cat_col = next((
 			c for c in bpy.data.collections
-			if c.name.lower() == code.lower()
+			if c.name.lower().split(".")[0] == code.lower()
 			and c.library and bpy.path.abspath(c.library.filepath) == anim_abs
 		), None)
 		if not cat_col:
@@ -763,7 +810,7 @@ def link_animation():
 		loaded_cat_colls.append(cat_col)
 		child_names = []
 		for child_col in cat_col.children:
-			if child_col.name.startswith(prefix):
+			if child_col.name.startswith(prefix_variants):
 				child_names.append(child_col.name)
 		desired[code] = child_names
 		print(f"Scanned '{cat_col.name}' -> found {len(child_names)} '{prefix}' collection(s): {child_names}")
@@ -773,7 +820,11 @@ def link_animation():
 	for code, names in desired.items():
 		if code == "cam":
 			continue
-		to_link.extend(names)
+		if isinstance(names, dict):
+			to_link.extend(names.get("fg", []))
+			to_link.extend(names.get("bg", []))
+		else:
+			to_link.extend(names)
 
 	existing_anim_colls = {
 		c.name for c in bpy.data.collections
@@ -796,6 +847,31 @@ def link_animation():
 		bg_cat_name = f"{code}_bg"
 		fg_cat_parent = cat_parents.get(fg_cat_name)
 		bg_cat_parent = cat_parents.get(bg_cat_name)
+
+		if isinstance(child_names, dict):
+			for sub_key, target_parent, target_label in (
+				("fg", fg_cat_parent, fg_cat_name),
+				("bg", bg_cat_parent, bg_cat_name),
+			):
+				for cname in child_names.get(sub_key, []):
+					col = next((c for c in bpy.data.collections
+								if c.name == cname and c.library and
+								bpy.path.abspath(c.library.filepath) == anim_abs), None)
+					if not col:
+						col = bpy.data.collections.get(cname)
+					if not col:
+						print(f"[WARNING] Expected linked crowd collection missing: {cname}")
+						continue
+					if target_parent:
+						if col not in list(target_parent.children):
+							existing_child = target_parent.children.get(col.name)
+							if existing_child and existing_child != col:
+								target_parent.children.unlink(existing_child)
+							target_parent.children.link(col)
+						if col in list(bpy.context.scene.collection.children):
+							bpy.context.scene.collection.children.unlink(col)
+						print(f"Linked '{cname}' under '{target_label}'")
+			continue
 
 		for cname in child_names:
 			# Prioritize collection specifically linked from anim_file
@@ -828,7 +904,7 @@ def link_animation():
 					bpy.context.scene.collection.children.unlink(col)
 				print(f"Linked '{cname}' under '{target_label}'")
 
-	# Remove temporary linked category parent collections (chr, prp, vhc)
+	# Remove temporary linked category parent collections (chr, prp, vhc, cwd, cwd_fg, cwd_bg)
 	for cat_col in loaded_cat_colls:
 		for scene in bpy.data.scenes:
 			_unlink_collection_from(scene.collection, cat_col)

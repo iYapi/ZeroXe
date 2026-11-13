@@ -58,7 +58,7 @@ departments:
         scripts:
     FX:
         kitsu_id: ""
-        code: "fx"
+        code: "vfx"
         source: "Animation"
         based: "shot"
         base_path: "@project_path@/03_post_production/03_vfx/"
@@ -124,6 +124,12 @@ asset_type:
         prefix: "v-"
         suffix: ""
         base_path: "@project_path@/02_production/01_asset/04_vehicle/"
+    CRWOD:
+        kitsu_id: ""
+        code: "cwd"
+        prefix: "cd-"
+        suffix: ""
+        base_path: ""
     MS_COMP:
         kitsu_id: "a1a995f9-f79b-431c-b9e0-60b6a5df502a"
         code: "ms"
