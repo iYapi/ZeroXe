@@ -541,8 +541,20 @@ def generate_up_version_script(filepath: str) -> Tuple[str, str]:
 def generate_up_master_script(
     filepath: str,
     setting_data: Optional[Dict[str, Any]] = None,
+    department: Optional[str] = None,
+    config_path: Optional[Union[str, Path]] = None,
 ) -> Tuple[str, str]:
     """Generate Blender script and master path for Up Master action."""
+    if (not setting_data or not setting_data.get("script")) and execute_feature:
+        res = execute_feature(
+            feature_name="Up Master",
+            filepath=filepath,
+            department=department,
+            config_path=config_path or DEFAULT_PIPELINE_YAML,
+            setting_data=setting_data,
+        )
+        if getattr(res, "success", False) and getattr(res, "script", None):
+            return res.script, res.target_path
     if up_master:
         return up_master(filepath, setting_data=setting_data)
     from versioning import VersioningSystem

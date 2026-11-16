@@ -743,7 +743,12 @@ class PipelineService:
             else:
                 proj_root = mounts.get("linux", "")
 
-            resolved_path = raw_path.replace("@project_path@", proj_root.rstrip("/\\"))
+            pipe_dir = str(pipe_yaml.parent).rstrip("/\\")
+            resolved_path = (
+                raw_path
+                .replace("@project_path@", proj_root.rstrip("/\\"))
+                .replace("@pipeline_path@", pipe_dir)
+            )
             return resolved_path
         except Exception as e:
             logger.warning(f"Failed to read department script from {pipe_yaml}: {e}")

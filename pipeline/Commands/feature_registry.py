@@ -358,17 +358,28 @@ def handle_up_master(
                     if department and department in departments:
                         dept_info = departments[department]
                     else:
-                        # Normalize match
-                        target_d = (department or "").lower()
-                        dept_info = next(
-                            (v for k, v in departments.items() if k.lower() == target_d or str(v.get("code", "")).lower() == target_d),
-                            {},
-                        )
+                        # Normalize match by name or code (or infer from filepath if department not provided)
+                        target_d = (department or "").lower().strip()
+                        dept_info = {}
+                        if target_d:
+                            dept_info = next(
+                                (v for k, v in departments.items() if k.lower() == target_d or str(v.get("code", "")).lower() == target_d),
+                                {},
+                            )
+                        if not dept_info and filepath:
+                            stem_no_ver = re.sub(r"[_.\-]v\d+$", "", Path(filepath).stem, flags=re.IGNORECASE)
+                            parts = stem_no_ver.split("_")
+                            inferred_code = parts[-1].lower() if len(parts) > 1 else ""
+                            if inferred_code:
+                                dept_info = next(
+                                    (v for k, v in departments.items() if isinstance(v, dict) and str(v.get("code", "")).lower() == inferred_code),
+                                    {},
+                                )
 
                     scripts_cfg = dept_info.get("scripts", {}) if isinstance(dept_info, dict) else {}
                     raw_preset = scripts_cfg.get("up_master")
                     if raw_preset:
-                        # Resolve project mount
+                        # Resolve project mount and pipeline directory
                         if not project_path:
                             mounts = cfg.get("global", {}).get("mounts", {})
                             if sys.platform.startswith("linux"):
@@ -378,9 +389,15 @@ def handle_up_master(
                             elif sys.platform.startswith("darwin"):
                                 project_path = mounts.get("darwin", "")
 
-                        resolved_preset = raw_preset.replace("@project_path@", (project_path or "").rstrip("/\\"))
+                        pipe_dir = str(cfg_p.parent).rstrip("/\\")
+                        resolved_preset = (
+                            raw_preset
+                            .replace("@project_path@", (project_path or "").rstrip("/\\"))
+                            .replace("@pipeline_path@", pipe_dir)
+                        )
                         if Path(resolved_preset).is_file():
-                            setting_data = {"script": resolved_preset}
+                            setting_data = dict(setting_data or {})
+                            setting_data["script"] = resolved_preset
                 except Exception as ex:
                     logger.warning(f"Could not load preset from config: {ex}")
 
